@@ -466,8 +466,8 @@ namespace SUP.P2FK
                 }
                 catch { };
             }
-            var sortedprofileStatese = profileStates.OrderBy(urn => urn.URN);
-            return sortedprofileStatese.ToList();
+            var sortedProfileStates = profileStates.OrderBy(urn => urn.URN);
+            return sortedProfileStates.ToList();
 
         }
 

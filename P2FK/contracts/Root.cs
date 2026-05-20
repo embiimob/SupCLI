@@ -146,7 +146,7 @@ namespace SUP.P2FK
         public static Root GetRootByTransactionId(string transactionid, string username, string password, string url, string versionbyte = "111", byte[] rootbytes = null, string signatureaddress = null, bool calculate = false)
         {
             Root P2FKRoot = new Root();
-            string diskpath = "root\\" + transactionid + "\\";
+            string diskpath = Path.Combine("root", transactionid);
             string P2FKJSONString = null;
             bool isMuted = false;
             try
@@ -156,7 +156,7 @@ namespace SUP.P2FK
                     try
                     {
 
-                        P2FKJSONString = System.IO.File.ReadAllText(diskpath + "ROOT.json");
+                        P2FKJSONString = System.IO.File.ReadAllText(Path.Combine(diskpath, "ROOT.json"));
                         P2FKRoot = JsonConvert.DeserializeObject<Root>(P2FKJSONString);
 
                         if (P2FKRoot.Confirmations > 0)
@@ -606,8 +606,8 @@ namespace SUP.P2FK
 
             address = address.Replace("<", "").Replace(">", "");
 
-            string sentinelDir = @"root\" + address;
-            string sentinelFile = sentinelDir + @"\ROOTS-PROCESSING";
+            string sentinelDir = Path.Combine("root", address);
+            string sentinelFile = Path.Combine(sentinelDir, "ROOTS-PROCESSING");
             try { Directory.CreateDirectory(sentinelDir); } catch { }
             try { using (System.IO.File.Create(sentinelFile)) { } } catch { }
 
@@ -629,8 +629,8 @@ namespace SUP.P2FK
                 {
                     try
                     {
-                        string diskpath = "root\\" + address + "\\";
-                        string P2FKJSONString = System.IO.File.ReadAllText(diskpath + "ROOTS.json");
+                        string diskpath = Path.Combine("root", address);
+                        string P2FKJSONString = System.IO.File.ReadAllText(Path.Combine(diskpath, "ROOTS.json"));
                         rootList = JsonConvert.DeserializeObject<List<Root>>(P2FKJSONString);
                         fetched = true;
                         // Warm the memory cache from the disk read (GUI mode only)

@@ -80,7 +80,7 @@ Contract/core files are carried from SUP’s `P2FK/classes` and `P2FK/contracts`
 1. Open **Visual Studio 2022**
 2. **File > Open > Project/Solution**
 3. Select:
-   - `/home/runner/work/SupCLI/SupCLI/SupCLI.csproj` (or your local clone path)
+   - `<your-local-clone-path>/SupCLI.csproj`
 
 ### 2) Restore and build
 
