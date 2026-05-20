@@ -350,7 +350,7 @@ namespace SUP.P2FK
                         try
                         {
                             // This will throw an exception if the file name is not valid
-                            System.IO.File.Create(diskpath + fileName).Dispose();
+                            System.IO.File.Create(Path.Combine(diskpath, fileName)).Dispose();
                             sigEndByte += packetSize + headerSize;
                         }
                         catch (Exception)
@@ -451,7 +451,7 @@ namespace SUP.P2FK
                             }
                         }
 
-                        using (FileStream fs = new FileStream(diskpath + fileName, FileMode.Create))
+                        using (FileStream fs = new FileStream(Path.Combine(diskpath, fileName), FileMode.Create))
                         {
                             fs.Write(fileBytes, 0, fileBytes.Length);
                         }
@@ -464,7 +464,7 @@ namespace SUP.P2FK
                         {
                             sigEndByte += packetSize + headerSize;
                             MessageList.Add(Encoding.UTF8.GetString(fileBytes));
-                            using (FileStream fs = new FileStream(diskpath + "MSG", FileMode.Create))
+                            using (FileStream fs = new FileStream(Path.Combine(diskpath, "MSG"), FileMode.Create))
                             {
                                 fs.Write(fileBytes, 0, fileBytes.Length);
 
