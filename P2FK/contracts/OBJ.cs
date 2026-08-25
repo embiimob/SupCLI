@@ -153,7 +153,7 @@ namespace SUP.P2FK
                     return objectState;
                 }
 
-                if (fetched && objectState != null && objectState.URN == null && objectState.ProcessHeight == 0)
+                if (!verbose && fetched && objectState != null && objectState.URN == null && objectState.ProcessHeight == 0)
                 {
 
                     return objectState;
@@ -1826,7 +1826,7 @@ namespace SUP.P2FK
 
                     //used to determine where to begin object State processing when retrieved from cache
 
-                    if ((objectState.ChangeLog == null || objectState.ChangeLog.Count == 0) && cachedChangeLog != null && cachedChangeLog.Count > 0)
+                    if (!verbose && (objectState.ChangeLog == null || objectState.ChangeLog.Count == 0) && cachedChangeLog != null && cachedChangeLog.Count > 0)
                     {
                         objectState.ChangeLog = new List<string>(cachedChangeLog);
                     }
