@@ -1808,7 +1808,7 @@ namespace SUP.P2FK
 
                     //used to determine where to begin object State processing when retrieved from cache
 
-                    if (!verbose && (objectState.ChangeLog == null || objectState.ChangeLog.Count == 0) && cachedChangeLog != null && cachedChangeLog.Count > 0)
+                    if ((objectState.ChangeLog == null || objectState.ChangeLog.Count == 0) && cachedChangeLog != null && cachedChangeLog.Count > 0)
                     {
                         objectState.ChangeLog = new List<string>(cachedChangeLog);
                     }
