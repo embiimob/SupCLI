@@ -1833,10 +1833,6 @@ namespace SUP.P2FK
                                     if (existing.Id > objectState.Id) { canCommit = false; }
                                     // At equal cursor, keep the fresher object snapshot.
                                     else if (existing.Id == objectState.Id && existing.ChangeDate > objectState.ChangeDate) { canCommit = false; }
-                                    if (!verbose && (objectState.ChangeLog == null || objectState.ChangeLog.Count == 0) && existing.ChangeLog != null && existing.ChangeLog.Count > 0)
-                                    {
-                                        objectState.ChangeLog = new List<string>(existing.ChangeLog);
-                                    }
                                 }
                             }
                             catch { }
