@@ -1825,21 +1825,29 @@ namespace SUP.P2FK
                         using (Root.AcquireAddressCacheLock(objectaddress, "OBJ"))
                         {
                             bool canCommit = true;
+                            OBJState stateToPersist = objectState;
                             try
                             {
                                 OBJState existing = JsonConvert.DeserializeObject<OBJState>(System.IO.File.ReadAllText(objTarget));
                                 if (existing != null)
                                 {
                                     if (existing.Id > objectState.Id) { canCommit = false; }
-                                    // At equal cursor, keep the fresher object snapshot unless the
-                                    // newly computed snapshot carries a richer changelog.
+                                    // At equal cursor, keep the fresher object snapshot.
                                     else if (existing.Id == objectState.Id)
                                     {
                                         int existingChangeLogCount = existing.ChangeLog?.Count ?? 0;
                                         int newChangeLogCount = objectState.ChangeLog?.Count ?? 0;
                                         bool hasRicherChangeLog = newChangeLogCount > existingChangeLogCount;
 
-                                        if (existing.ChangeDate > objectState.ChangeDate && !hasRicherChangeLog) { canCommit = false; }
+                                        if (existing.ChangeDate > objectState.ChangeDate)
+                                        {
+                                            if (hasRicherChangeLog)
+                                            {
+                                                existing.ChangeLog = new List<string>(objectState.ChangeLog);
+                                                stateToPersist = existing;
+                                            }
+                                            else { canCommit = false; }
+                                        }
                                     }
                                 }
                             }
@@ -1847,7 +1855,7 @@ namespace SUP.P2FK
 
                             if (canCommit)
                             {
-                                var objectSerialized = JsonConvert.SerializeObject(objectState);
+                                var objectSerialized = JsonConvert.SerializeObject(stateToPersist);
                                 Root.AtomicWriteCacheFile(objTarget, objectSerialized);
                             }
                         }
