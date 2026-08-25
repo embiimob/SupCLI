@@ -144,6 +144,15 @@ namespace SUP.P2FK
                     }
                     catch { }
                 }
+                if (fetched && !verbose && objectState != null && objectState.URN != null)
+                {
+                    if (objectState.ChangeLog == null)
+                    {
+                        objectState.ChangeLog = new List<string>();
+                    }
+                    return objectState;
+                }
+
                 if (fetched && objectState != null && objectState.URN == null && objectState.ProcessHeight == 0)
                 {
 
