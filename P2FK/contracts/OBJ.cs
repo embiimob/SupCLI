@@ -153,7 +153,7 @@ namespace SUP.P2FK
                     return objectState;
                 }
 
-                if (!verbose && fetched && objectState != null && objectState.URN == null && objectState.ProcessHeight == 0)
+                if (!verbose && fetched && objectState != null && objectState.URN == null && objectState.ProcessHeight > 0)
                 {
 
                     return objectState;
