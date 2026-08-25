@@ -150,6 +150,11 @@ namespace SUP.P2FK
                     return objectState;
                 }
 
+                if (objectState == null)
+                {
+                    objectState = new OBJState();
+                }
+
                 if (objectState.ChangeLog == null)
                 {
                     objectState.ChangeLog = new List<string>();
