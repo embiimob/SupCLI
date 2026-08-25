@@ -263,7 +263,7 @@ namespace SUP.P2FK
                                 }
 
 
-                                if (sigSeen == null || (verbose && sigSeen == transaction.TransactionId))
+                                if (sigSeen == null || sigSeen == transaction.TransactionId)
                                 {
 
                                     switch (transaction.File.ElementAtOrDefault(1).Key?.ToString())
