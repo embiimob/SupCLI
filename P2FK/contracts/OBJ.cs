@@ -155,6 +155,10 @@ namespace SUP.P2FK
 
                 if (!verbose && fetched && objectState != null && objectState.URN == null && objectState.ProcessHeight > 0)
                 {
+                    if (objectState.ChangeLog == null)
+                    {
+                        objectState.ChangeLog = new List<string>();
+                    }
 
                     return objectState;
                 }
