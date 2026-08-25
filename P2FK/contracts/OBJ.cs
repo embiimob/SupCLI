@@ -119,7 +119,7 @@ namespace SUP.P2FK
 
                 // Check in-memory cache first (skip disk read on warm addresses)
                 // In CLI mode the process exits immediately so the in-memory cache has no benefit.
-                if (!verbose && !Root.IsCLI && _objCache.TryGetValue(objectaddress, out OBJState memObj))
+                if (!verbose && !Root.IsCLI && _objCache.TryGetValue(objectaddress, out OBJState memObj) && memObj != null)
                 {
                     objectState = memObj;
                     fetched = true;
@@ -130,8 +130,12 @@ namespace SUP.P2FK
                     try
                     {
                         JSONOBJ = System.IO.File.ReadAllText(diskpath + "OBJ.json");
-                        objectState = JsonConvert.DeserializeObject<OBJState>(JSONOBJ);
-                        fetched = true;
+                        OBJState diskObj = JsonConvert.DeserializeObject<OBJState>(JSONOBJ);
+                        if (diskObj != null)
+                        {
+                            objectState = diskObj;
+                            fetched = true;
+                        }
                         // Warm the memory cache from the disk read (GUI mode only)
                         if (!Root.IsCLI && objectState != null && objectState.URN != null)
                         {
@@ -140,7 +144,7 @@ namespace SUP.P2FK
                     }
                     catch { }
                 }
-                if (fetched && objectState.URN == null && objectState.ProcessHeight == 0)
+                if (fetched && objectState != null && objectState.URN == null && objectState.ProcessHeight == 0)
                 {
 
                     return objectState;
