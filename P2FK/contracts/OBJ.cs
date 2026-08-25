@@ -1808,17 +1808,9 @@ namespace SUP.P2FK
 
                     //used to determine where to begin object State processing when retrieved from cache
 
-                    if (cachedChangeLog != null && cachedChangeLog.Count > 0)
+                    if ((objectState.ChangeLog == null || objectState.ChangeLog.Count == 0) && cachedChangeLog != null && cachedChangeLog.Count > 0)
                     {
-                        if (objectState.ChangeLog == null) { objectState.ChangeLog = new List<string>(); }
-                        HashSet<string> mergedLogs = new HashSet<string>(objectState.ChangeLog);
-                        foreach (string cachedLogEntry in cachedChangeLog)
-                        {
-                            if (mergedLogs.Add(cachedLogEntry))
-                            {
-                                objectState.ChangeLog.Add(cachedLogEntry);
-                            }
-                        }
+                        objectState.ChangeLog = new List<string>(cachedChangeLog);
                     }
 
                     objectState.Id = objectTransactions.Max(state => state.Id);
@@ -1883,6 +1875,7 @@ namespace SUP.P2FK
                             {
                                 var objectSerialized = JsonConvert.SerializeObject(stateToPersist);
                                 Root.AtomicWriteCacheFile(objTarget, objectSerialized);
+                                objectState = stateToPersist;
                             }
                         }
                         // Keep memory cache in sync with the freshly computed state (GUI mode only)
