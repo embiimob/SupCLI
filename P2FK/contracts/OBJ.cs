@@ -1866,6 +1866,11 @@ namespace SUP.P2FK
                                             }
                                             else { canCommit = false; }
                                         }
+                                        else
+                                        {
+                                            objectState.ChangeLog = mergedChangeLog;
+                                            stateToPersist = objectState;
+                                        }
                                     }
                                 }
                             }
