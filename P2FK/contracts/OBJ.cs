@@ -104,6 +104,7 @@ namespace SUP.P2FK
             try
             {
                 bool fetched = false;
+                List<string> cachedChangeLog = null;
 
                 if (System.IO.File.Exists(@"root\" + objectaddress + @"\BLOCK"))
                 {
@@ -143,6 +144,16 @@ namespace SUP.P2FK
                 {
 
                     return objectState;
+                }
+
+                if (objectState.ChangeLog == null)
+                {
+                    objectState.ChangeLog = new List<string>();
+                }
+
+                if (objectState.ChangeLog.Count > 0)
+                {
+                    cachedChangeLog = new List<string>(objectState.ChangeLog);
                 }
 
 
@@ -185,6 +196,10 @@ namespace SUP.P2FK
 
                     if (intProcessHeight != 0 && objectTransactions.Count() == 0)
                     {
+                        if (!verbose && objectState.ChangeLog.Count == 0 && cachedChangeLog != null && cachedChangeLog.Count > 0)
+                        {
+                            objectState.ChangeLog = new List<string>(cachedChangeLog);
+                        }
                         return objectState;
                     }
                     string[] requiredKeys = { "OBJ", "GIV", "BRN", "BUY", "LST" };
@@ -1793,6 +1808,11 @@ namespace SUP.P2FK
 
                     //used to determine where to begin object State processing when retrieved from cache
 
+                    if (!verbose && (objectState.ChangeLog == null || objectState.ChangeLog.Count == 0) && cachedChangeLog != null && cachedChangeLog.Count > 0)
+                    {
+                        objectState.ChangeLog = new List<string>(cachedChangeLog);
+                    }
+
                     objectState.Id = objectTransactions.Max(state => state.Id);
                     objectState.Verbose = verbose;
 
@@ -1813,6 +1833,10 @@ namespace SUP.P2FK
                                     if (existing.Id > objectState.Id) { canCommit = false; }
                                     // At equal cursor, keep the fresher object snapshot.
                                     else if (existing.Id == objectState.Id && existing.ChangeDate > objectState.ChangeDate) { canCommit = false; }
+                                    if (!verbose && (objectState.ChangeLog == null || objectState.ChangeLog.Count == 0) && existing.ChangeLog != null && existing.ChangeLog.Count > 0)
+                                    {
+                                        objectState.ChangeLog = new List<string>(existing.ChangeLog);
+                                    }
                                 }
                             }
                             catch { }
