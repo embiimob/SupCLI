@@ -1831,15 +1831,25 @@ namespace SUP.P2FK
                                 OBJState existing = JsonConvert.DeserializeObject<OBJState>(System.IO.File.ReadAllText(objTarget));
                                 if (existing != null)
                                 {
-                                    int existingChangeLogCount = existing.ChangeLog?.Count ?? 0;
-                                    int newChangeLogCount = objectState.ChangeLog?.Count ?? 0;
-                                    bool hasRicherChangeLog = newChangeLogCount > existingChangeLogCount;
+                                    List<string> existingChangeLog = existing.ChangeLog ?? new List<string>();
+                                    List<string> incomingChangeLog = objectState.ChangeLog ?? new List<string>();
+                                    HashSet<string> existingChangeLogSet = new HashSet<string>(existingChangeLog);
+                                    List<string> mergedChangeLog = new List<string>(existingChangeLog);
+                                    bool hasNewChangeLogEntries = false;
+                                    foreach (string logEntry in incomingChangeLog)
+                                    {
+                                        if (existingChangeLogSet.Add(logEntry))
+                                        {
+                                            mergedChangeLog.Add(logEntry);
+                                            hasNewChangeLogEntries = true;
+                                        }
+                                    }
 
                                     if (existing.Id > objectState.Id)
                                     {
-                                        if (hasRicherChangeLog)
+                                        if (hasNewChangeLogEntries)
                                         {
-                                            existing.ChangeLog = new List<string>(objectState.ChangeLog);
+                                            existing.ChangeLog = mergedChangeLog;
                                             stateToPersist = existing;
                                         }
                                         else { canCommit = false; }
@@ -1849,9 +1859,9 @@ namespace SUP.P2FK
                                     {
                                         if (existing.ChangeDate > objectState.ChangeDate)
                                         {
-                                            if (hasRicherChangeLog)
+                                            if (hasNewChangeLogEntries)
                                             {
-                                                existing.ChangeLog = new List<string>(objectState.ChangeLog);
+                                                existing.ChangeLog = mergedChangeLog;
                                                 stateToPersist = existing;
                                             }
                                             else { canCommit = false; }
