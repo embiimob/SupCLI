@@ -1808,9 +1808,17 @@ namespace SUP.P2FK
 
                     //used to determine where to begin object State processing when retrieved from cache
 
-                    if ((objectState.ChangeLog == null || objectState.ChangeLog.Count == 0) && cachedChangeLog != null && cachedChangeLog.Count > 0)
+                    if (cachedChangeLog != null && cachedChangeLog.Count > 0)
                     {
-                        objectState.ChangeLog = new List<string>(cachedChangeLog);
+                        if (objectState.ChangeLog == null) { objectState.ChangeLog = new List<string>(); }
+                        HashSet<string> mergedLogs = new HashSet<string>(objectState.ChangeLog);
+                        foreach (string cachedLogEntry in cachedChangeLog)
+                        {
+                            if (mergedLogs.Add(cachedLogEntry))
+                            {
+                                objectState.ChangeLog.Add(cachedLogEntry);
+                            }
+                        }
                     }
 
                     objectState.Id = objectTransactions.Max(state => state.Id);
