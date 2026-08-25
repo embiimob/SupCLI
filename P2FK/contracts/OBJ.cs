@@ -1831,14 +1831,22 @@ namespace SUP.P2FK
                                 OBJState existing = JsonConvert.DeserializeObject<OBJState>(System.IO.File.ReadAllText(objTarget));
                                 if (existing != null)
                                 {
-                                    if (existing.Id > objectState.Id) { canCommit = false; }
+                                    int existingChangeLogCount = existing.ChangeLog?.Count ?? 0;
+                                    int newChangeLogCount = objectState.ChangeLog?.Count ?? 0;
+                                    bool hasRicherChangeLog = newChangeLogCount > existingChangeLogCount;
+
+                                    if (existing.Id > objectState.Id)
+                                    {
+                                        if (hasRicherChangeLog)
+                                        {
+                                            existing.ChangeLog = new List<string>(objectState.ChangeLog);
+                                            stateToPersist = existing;
+                                        }
+                                        else { canCommit = false; }
+                                    }
                                     // At equal cursor, keep the fresher object snapshot.
                                     else if (existing.Id == objectState.Id)
                                     {
-                                        int existingChangeLogCount = existing.ChangeLog?.Count ?? 0;
-                                        int newChangeLogCount = objectState.ChangeLog?.Count ?? 0;
-                                        bool hasRicherChangeLog = newChangeLogCount > existingChangeLogCount;
-
                                         if (existing.ChangeDate > objectState.ChangeDate)
                                         {
                                             if (hasRicherChangeLog)
