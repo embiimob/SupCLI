@@ -153,7 +153,7 @@ namespace SUP.P2FK
 
 
 
-                            if (profileinspector != null && profileState.Creators == null && transaction.SignedBy == profileaddress)
+                            if (profileinspector != null && profileState.Creators == null)
                             {
 
                                 profileState.Creators = new List<string> { };
