@@ -155,7 +155,7 @@ namespace SUP.P2FK
                             }
 
 
-                            if (sigSeen == null || (calculate && sigSeen == transaction.TransactionId))
+                            if (sigSeen == null || sigSeen == transaction.TransactionId)
                             {
 
                                 INQ objectinspector = null;

@@ -140,7 +140,7 @@ namespace SUP.P2FK
                             }
 
 
-                            if (sigSeen == null || (verbose && sigSeen == transaction.TransactionId))
+                            if (sigSeen == null || sigSeen == transaction.TransactionId)
                             {
 
 
@@ -343,7 +343,7 @@ namespace SUP.P2FK
                                 }
                             }
 
-                            if (sigSeen == null || (verbose && sigSeen == transaction.TransactionId))
+                            if (sigSeen == null || sigSeen == transaction.TransactionId)
                             {
                                 PRO profileinspector = null;
                                 try
