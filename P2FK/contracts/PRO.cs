@@ -192,34 +192,38 @@ namespace SUP.P2FK
                             //has proper authority to make OBJ changes
                             if (profileinspector != null && profileState.Creators != null && profileState.Creators.Contains(transaction.SignedBy))
                             {
-                                if (profileinspector.cre != null && profileinspector.cre.Contains(transaction.SignedBy))
+                                if (profileinspector.cre != null)
                                 {
-                                    profileState.Creators.Clear();
-
+                                    // Resolve keyword indices to actual addresses before checking containment
+                                    var reversedKeywords = transaction.Keyword.Reverse().ToList();
+                                    List<string> resolvedCre = new List<string>();
                                     foreach (string keywordId in profileinspector.cre)
                                     {
-                                        if (int.TryParse(keywordId, NumberStyles.Any, CultureInfo.GetCultureInfo("en-US"), out int intkey))
+                                        if (int.TryParse(keywordId, NumberStyles.Any, CultureInfo.GetCultureInfo("en-US"), out int intkey)
+                                            && intkey < reversedKeywords.Count)
                                         {
-                                            string creator = transaction.Keyword.Reverse().ElementAt(intkey).Key;
+                                            resolvedCre.Add(reversedKeywords[intkey].Key);
+                                        }
+                                        else if (!int.TryParse(keywordId, NumberStyles.Any, CultureInfo.GetCultureInfo("en-US"), out _))
+                                        {
+                                            resolvedCre.Add(keywordId);
+                                        }
+                                    }
 
+                                    if (resolvedCre.Contains(transaction.SignedBy))
+                                    {
+                                        profileState.Creators.Clear();
+
+                                        foreach (string creator in resolvedCre)
+                                        {
                                             if (!profileState.Creators.Contains(creator))
                                             {
                                                 profileState.Creators.Add(creator);
                                             }
                                         }
-                                        else
-                                        {
-                                            if (!profileState.Creators.Contains(keywordId))
-                                            {
-                                                profileState.Creators.Add(keywordId);
-                                            }
-                                        }
 
+                                        profileState.ChangeDate = transaction.BlockDate;
                                     }
-
-
-                                    profileState.ChangeDate = transaction.BlockDate;
-
                                 }
                                 if (profileinspector.urn != null) { profileState.ChangeDate = transaction.BlockDate; profileState.URN = profileinspector.urn; }
                                 if (profileinspector.dnm != null) { profileState.ChangeDate = transaction.BlockDate; profileState.DisplayName = profileinspector.dnm; }
@@ -397,30 +401,37 @@ namespace SUP.P2FK
                                 // Has proper authority to make OBJ changes
                                 if (profileinspector != null && profileState.Creators != null && profileState.Creators.Contains(transaction.SignedBy))
                                 {
-                                    if (profileinspector.cre != null && profileinspector.cre.Contains(transaction.SignedBy))
+                                    if (profileinspector.cre != null)
                                     {
-                                        profileState.Creators.Clear();
-
+                                        // Resolve keyword indices to actual addresses before checking containment
+                                        var reversedKeywords = transaction.Keyword.Reverse().ToList();
+                                        List<string> resolvedCre = new List<string>();
                                         foreach (string keywordId in profileinspector.cre)
                                         {
-                                            if (int.TryParse(keywordId, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.GetCultureInfo("en-US"), out int intkey))
+                                            if (int.TryParse(keywordId, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.GetCultureInfo("en-US"), out int intkey)
+                                                && intkey < reversedKeywords.Count)
                                             {
-                                                string creator = transaction.Keyword.Reverse().ElementAt(intkey).Key;
+                                                resolvedCre.Add(reversedKeywords[intkey].Key);
+                                            }
+                                            else if (!int.TryParse(keywordId, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.GetCultureInfo("en-US"), out _))
+                                            {
+                                                resolvedCre.Add(keywordId);
+                                            }
+                                        }
 
+                                        if (resolvedCre.Contains(transaction.SignedBy))
+                                        {
+                                            profileState.Creators.Clear();
+
+                                            foreach (string creator in resolvedCre)
+                                            {
                                                 if (!profileState.Creators.Contains(creator))
                                                 {
                                                     profileState.Creators.Add(creator);
                                                 }
                                             }
-                                            else
-                                            {
-                                                if (!profileState.Creators.Contains(keywordId))
-                                                {
-                                                    profileState.Creators.Add(keywordId);
-                                                }
-                                            }
+                                            profileState.ChangeDate = transaction.BlockDate;
                                         }
-                                        profileState.ChangeDate = transaction.BlockDate;
                                     }
 
                                     if (profileinspector.urn != null) { profileState.ChangeDate = transaction.BlockDate; profileState.URN = profileinspector.urn; }
