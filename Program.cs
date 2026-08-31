@@ -21,11 +21,6 @@ namespace SUP
             var parserResult = Parser.Default.ParseArguments<CommandOptions>(args);
             if (parserResult is Parsed<CommandOptions> parsedOptions)
             {
-                // Signal all contract classes to skip in-memory caches.  The CLI
-                // process exits as soon as a result is returned, so building the
-                // in-memory cache only wastes time.  Disk caches are still used.
-                Root.IsCLI = true;
-
                 var options = parsedOptions.Value;
                 IDisposable cliAddressLock = null;
                 try
