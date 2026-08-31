@@ -67,18 +67,9 @@ namespace SUP.P2FK
         public DateTime BuildDate { get; set; }
         public bool Cached { get; set; }
 
-        private static readonly ConcurrentDictionary<string, List<Root>> _rootsCache = new ConcurrentDictionary<string, List<Root>>();
         // Stores true when the last GetRootsByAddress for an address completed fully
         // (no network/RPC error), false when it failed mid-fetch.
         private static readonly ConcurrentDictionary<string, bool> _lastFetchCompleted = new ConcurrentDictionary<string, bool>();
-
-        /// <summary>
-        /// Set to true by Program.cs when the process is running as a CLI command.
-        /// In CLI mode the process exits immediately after returning, so populating
-        /// in-memory caches only wastes CPU and allocation time.  Disk caches are
-        /// still read and written as normal.
-        /// </summary>
-        public static bool IsCLI { get; set; } = false;
 
         /// <summary>
         /// Returns true if the most recent GetRootsByAddress call for this address completed
@@ -617,30 +608,14 @@ namespace SUP.P2FK
                 {
                 bool fetched = false;
 
-                // Check in-memory cache first (skip disk read on warm addresses)
-                // In CLI mode the process exits immediately so there is no benefit to
-                // reading or writing the in-memory cache.
-                if (!calculate && !IsCLI && _rootsCache.TryGetValue(address, out List<Root> memCached))
+                try
                 {
-                    rootList = new List<Root>(memCached);
+                    string diskpath = Path.Combine("root", address);
+                    string P2FKJSONString = System.IO.File.ReadAllText(Path.Combine(diskpath, "ROOTS.json"));
+                    rootList = JsonConvert.DeserializeObject<List<Root>>(P2FKJSONString);
                     fetched = true;
                 }
-                else
-                {
-                    try
-                    {
-                        string diskpath = Path.Combine("root", address);
-                        string P2FKJSONString = System.IO.File.ReadAllText(Path.Combine(diskpath, "ROOTS.json"));
-                        rootList = JsonConvert.DeserializeObject<List<Root>>(P2FKJSONString);
-                        fetched = true;
-                        // Warm the memory cache from the disk read (GUI mode only)
-                        if (!IsCLI && rootList != null && rootList.Count > 0)
-                        {
-                            _rootsCache[address] = new List<Root>(rootList);
-                        }
-                    }
-                    catch { }
-                }
+                catch { }
 
 
                 int intProcessHeight = 0;
@@ -727,8 +702,6 @@ namespace SUP.P2FK
                     {
                         var rootSerialized = JsonConvert.SerializeObject(rootList);
                         AtomicWriteCacheFile(rootsTarget, rootSerialized);
-                        // Keep memory cache in sync with the freshly written data (GUI mode only)
-                        if (!IsCLI) { _rootsCache[address] = new List<Root>(rootList); }
                     }
 
                 }

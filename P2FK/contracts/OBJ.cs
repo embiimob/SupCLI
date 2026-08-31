@@ -94,7 +94,6 @@ namespace SUP.P2FK
 
 
         private readonly static object SupLocker = new object();
-        private static readonly ConcurrentDictionary<string, OBJState> _objCache = new ConcurrentDictionary<string, OBJState>();
         public static OBJState GetObjectByAddress(string objectaddress, string username, string password, string url, string versionByte = "111", bool verbose = false)
         {
 
@@ -117,33 +116,18 @@ namespace SUP.P2FK
                 string diskpath = "root\\" + objectaddress + "\\";
 
 
-                // Check in-memory cache first (skip disk read on warm addresses)
-                // In CLI mode the process exits immediately so the in-memory cache has no benefit.
-                if (!verbose && !Root.IsCLI && _objCache.TryGetValue(objectaddress, out OBJState memObj) && memObj != null)
+                // fetch current JSONOBJ from disk if it exists
+                try
                 {
-                    objectState = memObj;
-                    fetched = true;
-                }
-                else
-                {
-                    // fetch current JSONOBJ from disk if it exists
-                    try
+                    JSONOBJ = System.IO.File.ReadAllText(diskpath + "OBJ.json");
+                    OBJState diskObj = JsonConvert.DeserializeObject<OBJState>(JSONOBJ);
+                    if (diskObj != null)
                     {
-                        JSONOBJ = System.IO.File.ReadAllText(diskpath + "OBJ.json");
-                        OBJState diskObj = JsonConvert.DeserializeObject<OBJState>(JSONOBJ);
-                        if (diskObj != null)
-                        {
-                            objectState = diskObj;
-                            fetched = true;
-                        }
-                        // Warm the memory cache from the disk read (GUI mode only)
-                        if (!Root.IsCLI && objectState != null && objectState.URN != null)
-                        {
-                            _objCache[objectaddress] = objectState;
-                        }
+                        objectState = diskObj;
+                        fetched = true;
                     }
-                    catch { }
                 }
+                catch { }
                 if (fetched && !verbose && objectState != null && objectState.URN != null)
                 {
                     if (objectState.ChangeLog == null)
@@ -1905,8 +1889,6 @@ namespace SUP.P2FK
                                 objectState = stateToPersist;
                             }
                         }
-                        // Keep memory cache in sync with the freshly computed state (GUI mode only)
-                        if (!Root.IsCLI) { _objCache[objectaddress] = objectState; }
                     }
                 }
 

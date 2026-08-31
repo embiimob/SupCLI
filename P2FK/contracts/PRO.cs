@@ -50,7 +50,6 @@ namespace SUP.P2FK
         public DateTime CreatedDate { get; set; }
         public DateTime ChangeDate { get; set; }
         private static char[] specialChars = new char[] { '\\', '/', ':', '*', '?', '"', '<', '>', '|' };
-        private static readonly ConcurrentDictionary<string, PROState> _profileCache = new ConcurrentDictionary<string, PROState>();
 
         public static PROState GetProfileByAddress(string profileaddress, string username, string password, string url, string versionByte = "111", bool verbose = false)
         {
@@ -66,27 +65,13 @@ namespace SUP.P2FK
 
             using (Root.AcquireAddressCacheLock(profileaddress, "GetProfileByAddress"))
             {
-                // Check in-memory cache first (skip disk read on warm addresses)
-                // In CLI mode the process exits immediately so the in-memory cache has no benefit.
-                if (!verbose && !Root.IsCLI && _profileCache.TryGetValue(profileaddress, out PROState memProfile))
+                // fetch current JSONOBJ from disk if it exists
+                try
                 {
-                    profileState = memProfile;
+                    JSONOBJ = System.IO.File.ReadAllText(profilePath);
+                    profileState = JsonConvert.DeserializeObject<PROState>(JSONOBJ);
                 }
-                else
-                {
-                    // fetch current JSONOBJ from disk if it exists
-                    try
-                    {
-                        JSONOBJ = System.IO.File.ReadAllText(profilePath);
-                        profileState = JsonConvert.DeserializeObject<PROState>(JSONOBJ);
-                        // Warm the memory cache from the disk read (GUI mode only)
-                        if (!Root.IsCLI && profileState != null)
-                        {
-                            _profileCache[profileaddress] = profileState;
-                        }
-                    }
-                    catch { }
-                }
+                catch { }
 
                 int intProcessHeight = 0;
                 bool calculated = false;
@@ -284,9 +269,6 @@ namespace SUP.P2FK
                         var profileSerialized = JsonConvert.SerializeObject(profileState);
                         Root.AtomicWriteCacheFile(profilePath, profileSerialized);
                     }
-
-                    // Keep memory cache in sync with the freshly computed state (GUI mode only)
-                    if (!Root.IsCLI) { _profileCache[profileaddress] = profileState; }
                 }
 
                 return profileState;
