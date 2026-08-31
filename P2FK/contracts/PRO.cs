@@ -208,6 +208,16 @@ namespace SUP.P2FK
                                         }
 
                                         profileState.ChangeDate = transaction.BlockDate;
+
+                                        // If the transfer has resolved to a single address that is not
+                                        // this profile address, the URN has moved away.  Reset the state
+                                        // immediately so further transactions in this loop are processed
+                                        // against a clean (unclaimed) profile rather than the old one.
+                                        if (profileState.Creators.Count == 1 && profileState.Creators[0] != profileaddress)
+                                        {
+                                            profileState = new PROState { ProcessHeight = intProcessHeight };
+                                            goto nextTransaction;
+                                        }
                                     }
                                 }
                                 if (profileinspector.urn != null) { profileState.ChangeDate = transaction.BlockDate; profileState.URN = profileinspector.urn; }
@@ -233,8 +243,10 @@ namespace SUP.P2FK
 
 
 
+
                         }
                     }
+                    nextTransaction:;
                 }
 
                 if (calculated && Root.WasLastFetchComplete(profileaddress))
