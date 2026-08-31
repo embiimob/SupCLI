@@ -208,6 +208,16 @@ namespace SUP.P2FK
                                         }
 
                                         profileState.ChangeDate = transaction.BlockDate;
+
+                                        // If the transfer has resolved to a single address that is not
+                                        // this profile address, the URN has moved away.  Reset the state
+                                        // immediately so further transactions in this loop are processed
+                                        // against a clean (unclaimed) profile rather than the old one.
+                                        if (profileState.Creators.Count == 1 && profileState.Creators[0] != profileaddress)
+                                        {
+                                            profileState = new PROState { ProcessHeight = intProcessHeight };
+                                            goto nextTransaction;
+                                        }
                                     }
                                 }
                                 if (profileinspector.urn != null) { profileState.ChangeDate = transaction.BlockDate; profileState.URN = profileinspector.urn; }
@@ -233,8 +243,10 @@ namespace SUP.P2FK
 
 
 
+
                         }
                     }
+                    nextTransaction:;
                 }
 
                 if (calculated && Root.WasLastFetchComplete(profileaddress))
@@ -242,6 +254,20 @@ namespace SUP.P2FK
                     if (objectTransactions.Count() > 0)
                     {
                         profileState.Id = objectTransactions.Max(max => max.Id);
+                    }
+
+                    // If the final creator list contains exactly one address that is not
+                    // profileaddress, the URN transfer has completed and the profile no
+                    // longer belongs to this address.  Return and cache a nullified state
+                    // so the address is free to claim a new URN.
+                    if (profileState.Creators != null
+                        && profileState.Creators.Count == 1
+                        && profileState.Creators[0] != profileaddress)
+                    {
+                        PROState nullified = new PROState { Id = profileState.Id, ProcessHeight = profileState.ProcessHeight };
+                        var nullifiedSerialized = JsonConvert.SerializeObject(nullified);
+                        Root.AtomicWriteCacheFile(profilePath, nullifiedSerialized);
+                        return nullified;
                     }
 
                     bool canCommit = true;
