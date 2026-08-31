@@ -244,6 +244,20 @@ namespace SUP.P2FK
                         profileState.Id = objectTransactions.Max(max => max.Id);
                     }
 
+                    // If the final creator list contains exactly one address that is not
+                    // profileaddress, the URN transfer has completed and the profile no
+                    // longer belongs to this address.  Return and cache a nullified state
+                    // so the address is free to claim a new URN.
+                    if (profileState.Creators != null
+                        && profileState.Creators.Count == 1
+                        && profileState.Creators[0] != profileaddress)
+                    {
+                        PROState nullified = new PROState { Id = profileState.Id, ProcessHeight = profileState.ProcessHeight };
+                        var nullifiedSerialized = JsonConvert.SerializeObject(nullified);
+                        Root.AtomicWriteCacheFile(profilePath, nullifiedSerialized);
+                        return nullified;
+                    }
+
                     bool canCommit = true;
                     try
                     {
