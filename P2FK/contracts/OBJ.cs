@@ -240,8 +240,9 @@ namespace SUP.P2FK
                 int intProcessHeight = 0;
                 try { intProcessHeight = objectState.Id; } catch { }
 
-                Root[] objectTransactions;
                 List<string> pendingCacheInvalidations = new List<string>();
+                AddPendingCacheInvalidations(objectState, pendingCacheInvalidations);
+                Root[] objectTransactions;
                 bool shouldInvalidateCaches = false;
 
                 if (verbose == true) { intProcessHeight = 0; objectState = new OBJState(); objectState.ChangeLog = new List<string>(); }
@@ -1844,6 +1845,7 @@ namespace SUP.P2FK
                                             break;
                                     }
 
+                                    AddPendingCacheInvalidations(objectState, pendingCacheInvalidations);
                                 }
 
 
