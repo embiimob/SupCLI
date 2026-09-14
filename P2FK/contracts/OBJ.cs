@@ -263,6 +263,38 @@ namespace SUP.P2FK
             return true;
         }
 
+        private static string GetObjectStateAddress(OBJState state, string versionByte)
+        {
+            if (state == null || string.IsNullOrWhiteSpace(state.URN))
+            {
+                return null;
+            }
+
+            try
+            {
+                return Root.GetPublicAddressByKeyword(state.URN, versionByte);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static void UpsertObjectStateByAddress(List<OBJState> states, string objectAddress, OBJState refreshedState, string versionByte)
+        {
+            if (states == null || string.IsNullOrWhiteSpace(objectAddress))
+            {
+                return;
+            }
+
+            states.RemoveAll(state => GetObjectStateAddress(state, versionByte) == objectAddress);
+
+            if (refreshedState != null && refreshedState.URN != null)
+            {
+                states.Add(refreshedState);
+            }
+        }
+
         public static OBJState GetObjectByAddress(string objectaddress, string username, string password, string url, string versionByte = "111", bool verbose = false)
         {
 
@@ -2806,26 +2838,8 @@ namespace SUP.P2FK
                                         if (!addedValues.Contains(key))
                                         {
                                             addedValues.Add(key);
-
-                                            OBJState existingObjectState = null;
-                                            try { existingObjectState = objectStates.FirstOrDefault(os => os.Creators.First().Key == key); } catch { }
-
-                                            if (existingObjectState != null)
-                                            {
-                                                OBJState isObject = GetObjectByAddress(key, username, password, url, versionByte, calculate);
-                                                if (isObject.URN != null)
-                                                {
-                                                    objectStates[objectStates.IndexOf(existingObjectState)] = isObject;
-                                                }
-                                            }
-                                            else
-                                            {
-                                                OBJState newObject = GetObjectByAddress(key, username, password, url, versionByte, calculate);
-                                                if (newObject.URN != null)
-                                                {
-                                                    objectStates.Add(newObject);
-                                                }
-                                            }
+                                            OBJState refreshedObjectState = GetObjectByAddress(key, username, password, url, versionByte, calculate);
+                                            UpsertObjectStateByAddress(objectStates, key, refreshedObjectState, versionByte);
                                         }
                                     }
 
@@ -2840,28 +2854,8 @@ namespace SUP.P2FK
                                         if (!addedValues.Contains(key))
                                         {
                                             addedValues.Add(key);
-
-
-                                            OBJState existingObjectState = null;
-
-                                            try { existingObjectState = objectStates.FirstOrDefault(os => os.Creators.First().Key == key); } catch { } // MOVE ON
-
-                                            if (existingObjectState != null)
-                                            {
-                                                OBJState isObject = GetObjectByAddress(key, username, password, url, versionByte, calculate);
-                                                if (isObject.URN != null)
-                                                {
-                                                    objectStates[objectStates.IndexOf(existingObjectState)] = isObject;
-                                                }
-                                            }
-                                            else
-                                            {
-                                                OBJState newObject = GetObjectByAddress(key, username, password, url, versionByte, calculate);
-                                                if (newObject.URN != null)
-                                                {
-                                                    objectStates.Add(newObject);
-                                                }
-                                            }
+                                            OBJState refreshedObjectState = GetObjectByAddress(key, username, password, url, versionByte, calculate);
+                                            UpsertObjectStateByAddress(objectStates, key, refreshedObjectState, versionByte);
                                         }
                                     }
 
