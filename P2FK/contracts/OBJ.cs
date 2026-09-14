@@ -263,38 +263,6 @@ namespace SUP.P2FK
             return true;
         }
 
-        private static string GetObjectStateAddress(OBJState state, string versionByte)
-        {
-            if (state == null || string.IsNullOrWhiteSpace(state.URN))
-            {
-                return null;
-            }
-
-            try
-            {
-                return Root.GetPublicAddressByKeyword(state.URN, versionByte);
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        private static void UpsertObjectStateByAddress(List<OBJState> states, string objectAddress, OBJState refreshedState, string versionByte)
-        {
-            if (states == null || string.IsNullOrWhiteSpace(objectAddress))
-            {
-                return;
-            }
-
-            states.RemoveAll(state => GetObjectStateAddress(state, versionByte) == objectAddress);
-
-            if (refreshedState != null && refreshedState.URN != null)
-            {
-                states.Add(refreshedState);
-            }
-        }
-
         public static OBJState GetObjectByAddress(string objectaddress, string username, string password, string url, string versionByte = "111", bool verbose = false)
         {
 
@@ -2792,9 +2760,12 @@ namespace SUP.P2FK
             using (Root.AcquireAddressCacheLock(objectaddress, "GetObjectsByAddress"))
             {
                 int intProcessHeight = 0;
+                int cachedProcessHeight = 0;
+                bool rebuildFromScratch = false;
 
                 // fetch current JSONOBJ from disk if it exists (supports legacy list and wrapped format)
                 TryLoadObjectListCache(objectsByAddressPath, out objectStates, out intProcessHeight);
+                cachedProcessHeight = intProcessHeight;
 
                 if (calculate)
                 {
@@ -2802,13 +2773,23 @@ namespace SUP.P2FK
                     objectStates = new List<OBJState> { };
                 }
 
+                rebuildFromScratch = calculate || intProcessHeight == 0;
+
                 Root[] objectTransactions = Root.GetRootsByAddress(objectaddress, username, password, url, intProcessHeight, -1, versionByte, calculate);
 
 
-                if (intProcessHeight != 0 && objectTransactions.Count() == 0)
+                if (!calculate && cachedProcessHeight != 0 && objectTransactions.Count() == 0)
                 {
-                    StampObjectListCursor(objectStates, intProcessHeight);
+                    StampObjectListCursor(objectStates, cachedProcessHeight);
                     return SliceObjectsByAddress(objectStates);
+                }
+
+                if (!calculate && cachedProcessHeight != 0 && objectTransactions.Count() > 0)
+                {
+                    rebuildFromScratch = true;
+                    intProcessHeight = 0;
+                    objectStates = new List<OBJState> { };
+                    objectTransactions = Root.GetRootsByAddress(objectaddress, username, password, url, 0, -1, versionByte, true);
                 }
 
                 List<string> addedValues = new List<string>();
@@ -2838,8 +2819,11 @@ namespace SUP.P2FK
                                         if (!addedValues.Contains(key))
                                         {
                                             addedValues.Add(key);
-                                            OBJState refreshedObjectState = GetObjectByAddress(key, username, password, url, versionByte, calculate);
-                                            UpsertObjectStateByAddress(objectStates, key, refreshedObjectState, versionByte);
+                                            OBJState refreshedObjectState = GetObjectByAddress(key, username, password, url, versionByte, rebuildFromScratch);
+                                            if (refreshedObjectState.URN != null)
+                                            {
+                                                objectStates.Add(refreshedObjectState);
+                                            }
                                         }
                                     }
 
@@ -2854,8 +2838,11 @@ namespace SUP.P2FK
                                         if (!addedValues.Contains(key))
                                         {
                                             addedValues.Add(key);
-                                            OBJState refreshedObjectState = GetObjectByAddress(key, username, password, url, versionByte, calculate);
-                                            UpsertObjectStateByAddress(objectStates, key, refreshedObjectState, versionByte);
+                                            OBJState refreshedObjectState = GetObjectByAddress(key, username, password, url, versionByte, rebuildFromScratch);
+                                            if (refreshedObjectState.URN != null)
+                                            {
+                                                objectStates.Add(refreshedObjectState);
+                                            }
                                         }
                                     }
 
