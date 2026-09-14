@@ -520,7 +520,7 @@ namespace SUP.P2FK
                     //string asciiString = Encoding.ASCII.GetString(transactionBytes);
 
                     // Create SHA-256 hash
-                    System.Security.Cryptography.SHA256 mySHA256 = SHA256.Create();
+                    System.Security.Cryptography.SHA256 mySHA256 = System.Security.Cryptography.SHA256.Create();
                     P2FKRoot.Hash = BitConverter
                         .ToString(
                             mySHA256.ComputeHash(transactionBytes

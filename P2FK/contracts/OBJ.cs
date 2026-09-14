@@ -2147,6 +2147,7 @@ namespace SUP.P2FK
         {
 
             OBJState objectState = new OBJState();
+            string JSONOBJ;
             if (searchstring == null) { return objectState; }
             string objectaddress = Root.GetPublicAddressByKeyword(searchstring, versionByte);
             if (System.IO.File.Exists(@"root\" + objectaddress + @"\BLOCK")) { return objectState; }
@@ -2719,8 +2720,6 @@ namespace SUP.P2FK
                 return objectStates;
             }
 
-
-            string JSONOBJ;
             string diskpath = "root\\" + objectaddress + "\\";
             string objectsByAddressPath = diskpath + "GetObjectsByAddress.json";
 
