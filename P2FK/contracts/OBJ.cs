@@ -263,7 +263,7 @@ namespace SUP.P2FK
             return true;
         }
 
-        public static OBJState GetObjectByAddress(string objectaddress, string username, string password, string url, string versionByte = "111", bool verbose = false)
+        public static OBJState GetObjectByAddress(string objectaddress, string username, string password, string url, string versionByte = "111", bool verbose = false, bool forceRefresh = false)
         {
 
             OBJState objectState = new OBJState();
@@ -297,7 +297,7 @@ namespace SUP.P2FK
                     }
                 }
                 catch { }
-                if (fetched && !verbose && objectState != null && objectState.URN != null)
+                if (fetched && !verbose && !forceRefresh && objectState != null && objectState.URN != null)
                 {
                     if (objectState.ChangeLog == null)
                     {
@@ -306,7 +306,7 @@ namespace SUP.P2FK
                     return objectState;
                 }
 
-                if (!verbose && fetched && objectState != null && objectState.URN == null && objectState.ProcessHeight > 0)
+                if (!verbose && !forceRefresh && fetched && objectState != null && objectState.URN == null && objectState.ProcessHeight > 0)
                 {
                     if (objectState.ChangeLog == null)
                     {
@@ -362,7 +362,7 @@ namespace SUP.P2FK
                 Root[] objectTransactions;
                 bool shouldInvalidateCaches = false;
 
-                if (verbose == true) { intProcessHeight = 0; objectState = new OBJState(); objectState.ChangeLog = new List<string>(); }
+                if (verbose || forceRefresh) { intProcessHeight = 0; objectState = new OBJState(); objectState.ChangeLog = new List<string>(); }
 
                 lock (SupLocker)
                 {
@@ -2819,7 +2819,7 @@ namespace SUP.P2FK
                                         if (!addedValues.Contains(key))
                                         {
                                             addedValues.Add(key);
-                                            OBJState refreshedObjectState = GetObjectByAddress(key, username, password, url, versionByte, rebuildFromScratch);
+                                            OBJState refreshedObjectState = GetObjectByAddress(key, username, password, url, versionByte, false, rebuildFromScratch);
                                             if (refreshedObjectState.URN != null)
                                             {
                                                 objectStates.Add(refreshedObjectState);
@@ -2838,7 +2838,7 @@ namespace SUP.P2FK
                                         if (!addedValues.Contains(key))
                                         {
                                             addedValues.Add(key);
-                                            OBJState refreshedObjectState = GetObjectByAddress(key, username, password, url, versionByte, rebuildFromScratch);
+                                            OBJState refreshedObjectState = GetObjectByAddress(key, username, password, url, versionByte, false, rebuildFromScratch);
                                             if (refreshedObjectState.URN != null)
                                             {
                                                 objectStates.Add(refreshedObjectState);
@@ -3215,7 +3215,7 @@ namespace SUP.P2FK
 
                 if (Regex.IsMatch(directoryName, "^[1-9A-HJ-NP-Za-km-z]{34}$"))
                 {
-                    OBJState isOBject = OBJState.GetObjectByAddress(directoryName, username, password, url, versionByte, calculate);
+                    OBJState isOBject = OBJState.GetObjectByAddress(directoryName, username, password, url, versionByte, false, calculate);
                     if (isOBject.URN != null) { objectStates.Add(isOBject); }
                 }
 
