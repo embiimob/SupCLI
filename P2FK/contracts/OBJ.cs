@@ -94,6 +94,58 @@ namespace SUP.P2FK
 
 
         private readonly static object SupLocker = new object();
+
+        private static string BuildCacheInvalidationFingerprint(OBJState state)
+        {
+            if (state == null) { return string.Empty; }
+
+            return JsonConvert.SerializeObject(new
+            {
+                state.TransactionId,
+                state.URN,
+                state.URI,
+                state.Image,
+                state.Name,
+                state.Description,
+                state.Attributes,
+                state.License,
+                state.Maximum,
+                state.Creators,
+                state.Owners,
+                state.Royalties,
+                state.Offers,
+                state.Listings,
+                state.LockedDate,
+                state.CreatedDate,
+                state.ChangeDate
+            });
+        }
+
+        private static void AddPendingCacheInvalidations(OBJState state, List<string> pendingCacheInvalidations)
+        {
+            if (state?.Creators != null)
+            {
+                foreach (string creatorAddress in state.Creators.Keys)
+                {
+                    if (!string.IsNullOrWhiteSpace(creatorAddress) && !pendingCacheInvalidations.Contains(creatorAddress))
+                    {
+                        pendingCacheInvalidations.Add(creatorAddress);
+                    }
+                }
+            }
+
+            if (state?.Owners != null)
+            {
+                foreach (string ownerAddress in state.Owners.Keys)
+                {
+                    if (!string.IsNullOrWhiteSpace(ownerAddress) && !pendingCacheInvalidations.Contains(ownerAddress))
+                    {
+                        pendingCacheInvalidations.Add(ownerAddress);
+                    }
+                }
+            }
+        }
+
         public static OBJState GetObjectByAddress(string objectaddress, string username, string password, string url, string versionByte = "111", bool verbose = false)
         {
 
@@ -162,6 +214,8 @@ namespace SUP.P2FK
                     cachedChangeLog = new List<string>(objectState.ChangeLog);
                 }
 
+                string initialStateFingerprint = BuildCacheInvalidationFingerprint(objectState);
+
 
                 if (objectState.URN != null && objectState.ChangeDate.Year.ToString() == "1970")
                 {
@@ -187,11 +241,8 @@ namespace SUP.P2FK
                 try { intProcessHeight = objectState.Id; } catch { }
 
                 Root[] objectTransactions;
-                // Collect creator addresses whose collection-cache files should be
-                // invalidated only AFTER OBJ.json has been written successfully. Deleting
-                // them mid-loop would leave the cache in a broken state if the process is
-                // killed before the write completes.
                 List<string> pendingCacheInvalidations = new List<string>();
+                bool shouldInvalidateCaches = false;
 
                 if (verbose == true) { intProcessHeight = 0; objectState = new OBJState(); objectState.ChangeLog = new List<string>(); }
 
@@ -1760,17 +1811,6 @@ namespace SUP.P2FK
                                                             }
                                                             objectState.LockedDate = transaction.BlockDate;
                                                         }
-
-
-
-                                                        //force all assoicated collections to update by purging the cache file when listed on secondary
-                                                        // Defer the actual deletion until after OBJ.json has been written so a
-                                                        // mid-loop process kill never leaves the cache in a partially-rebuilt state.
-                                                        foreach (string creatorAddress in objectState.Creators.Keys)
-                                                        {
-                                                            if (!pendingCacheInvalidations.Contains(creatorAddress))
-                                                                pendingCacheInvalidations.Add(creatorAddress);
-                                                        }
                                                         if (verbose)
                                                         {
                                                             logstatus = "[\"" + transaction.SignedBy + "\",\"" + objectToList + "\",\"List\",\"" + qtyToList + "\",\"" + eachCost + "\",\"Success\",\"" + transaction.BlockDate.ToString() + "\"]";
@@ -1887,7 +1927,13 @@ namespace SUP.P2FK
                                 var objectSerialized = JsonConvert.SerializeObject(stateToPersist);
                                 Root.AtomicWriteCacheFile(objTarget, objectSerialized);
                                 objectState = stateToPersist;
+                                shouldInvalidateCaches = initialStateFingerprint != BuildCacheInvalidationFingerprint(stateToPersist);
                             }
+                        }
+
+                        if (shouldInvalidateCaches)
+                        {
+                            AddPendingCacheInvalidations(objectState, pendingCacheInvalidations);
                         }
                     }
                 }
@@ -1895,11 +1941,12 @@ namespace SUP.P2FK
                 // Execute deferred collection-cache invalidations now that OBJ.json is
                 // safely written. Doing this outside the lock and after the write ensures
                 // a process kill during the loop cannot leave the cache partly cleared.
-                if (Root.WasLastFetchComplete(objectaddress))
+                if (Root.WasLastFetchComplete(objectaddress) && shouldInvalidateCaches)
                 {
                     foreach (string addr in pendingCacheInvalidations)
                     {
                         try { System.IO.File.Delete(@"root\" + addr + @"\" + "GetObjectsByAddress.json"); } catch { }
+                        try { System.IO.File.Delete(@"root\" + addr + @"\" + "GetObjectsOwnedByAddress.json"); } catch { }
                         try { System.IO.File.Delete(@"root\" + addr + @"\" + "GetObjectsCreatedByAddress.json"); } catch { }
                     }
                 }
