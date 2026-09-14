@@ -263,6 +263,56 @@ namespace SUP.P2FK
             return true;
         }
 
+        private static bool ShouldCommitDerivedObjectListCache(string cachePath, int newCursor)
+        {
+            if (!TryLoadObjectListCache(cachePath, out _, out int existingCursor))
+            {
+                return true;
+            }
+
+            return newCursor >= existingCursor;
+        }
+
+        private static string GetObjectAddressFromState(OBJState state, string versionByte)
+        {
+            if (state == null || string.IsNullOrWhiteSpace(state.URN))
+            {
+                return null;
+            }
+
+            try
+            {
+                return Root.GetPublicAddressByKeyword(state.URN, versionByte);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static List<OBJState> RefreshFilteredObjectStates(IEnumerable<OBJState> cachedStates, string ownerOrCreatorAddress, string username, string password, string url, string versionByte, Func<OBJState, string, bool> includePredicate)
+        {
+            List<OBJState> refreshedStates = new List<OBJState>();
+            HashSet<string> seenObjectAddresses = new HashSet<string>();
+
+            foreach (OBJState cachedState in cachedStates ?? Enumerable.Empty<OBJState>())
+            {
+                string objectAddress = GetObjectAddressFromState(cachedState, versionByte);
+                if (string.IsNullOrWhiteSpace(objectAddress) || !seenObjectAddresses.Add(objectAddress))
+                {
+                    continue;
+                }
+
+                OBJState refreshedState = GetObjectByAddress(objectAddress, username, password, url, versionByte, false, true);
+                if (refreshedState != null && refreshedState.URN != null && includePredicate(refreshedState, ownerOrCreatorAddress))
+                {
+                    refreshedStates.Add(refreshedState);
+                }
+            }
+
+            return refreshedStates;
+        }
+
         public static OBJState GetObjectByAddress(string objectaddress, string username, string password, string url, string versionByte = "111", bool verbose = false, bool forceRefresh = false)
         {
 
@@ -2775,7 +2825,8 @@ namespace SUP.P2FK
 
                 rebuildFromScratch = calculate || intProcessHeight == 0;
 
-                Root[] objectTransactions = Root.GetRootsByAddress(objectaddress, username, password, url, intProcessHeight, -1, versionByte, calculate);
+                int deltaProbeCursor = (!calculate && intProcessHeight > 0) ? intProcessHeight + 1 : intProcessHeight;
+                Root[] objectTransactions = Root.GetRootsByAddress(objectaddress, username, password, url, deltaProbeCursor, -1, versionByte, calculate);
 
 
                 if (!calculate && cachedProcessHeight != 0 && objectTransactions.Count() == 0)
@@ -2789,7 +2840,7 @@ namespace SUP.P2FK
                     rebuildFromScratch = true;
                     intProcessHeight = 0;
                     objectStates = new List<OBJState> { };
-                    objectTransactions = Root.GetRootsByAddress(objectaddress, username, password, url, 0, -1, versionByte, true);
+                    objectTransactions = Root.GetRootsByAddress(objectaddress, username, password, url, 0, -1, versionByte);
                 }
 
                 List<string> addedValues = new List<string>();
@@ -2898,6 +2949,30 @@ namespace SUP.P2FK
                 int cachedCursor = 0;
                 bool hasOwnedCache = TryLoadObjectListCache(ownedPath, out objectStates, out cachedCursor);
 
+                if (hasOwnedCache)
+                {
+                    int deltaProbeCursor = cachedCursor > 0 ? cachedCursor + 1 : 0;
+                    Root[] newAddressRoots = Root.GetRootsByAddress(objectaddress, username, password, url, deltaProbeCursor, -1, versionByte);
+                    if (Root.WasLastFetchComplete(objectaddress) && newAddressRoots.Count() == 0)
+                    {
+                        objectStates = RefreshFilteredObjectStates(objectStates, objectaddress, username, password, url, versionByte,
+                            (state, address) => state.Owners != null && state.Owners.ContainsKey(address));
+                        StampObjectListCursor(objectStates, cachedCursor);
+
+                        if (ShouldCommitDerivedObjectListCache(ownedPath, cachedCursor))
+                        {
+                            var payload = new
+                            {
+                                LastRootId = cachedCursor,
+                                Objects = objectStates
+                            };
+                            Root.AtomicWriteCacheFile(ownedPath, JsonConvert.SerializeObject(payload));
+                        }
+
+                        return SliceOwned(objectStates);
+                    }
+                }
+
                 List<OBJState> cachedObjectStates = OBJState.GetObjectsByAddress(objectaddress, username, password, url, versionByte, 0, -1);
                 int freshCursor = 0;
                 if (!TryLoadObjectListCache(objectsByAddressPath, out _, out freshCursor))
@@ -2926,7 +3001,7 @@ namespace SUP.P2FK
                     StampObjectListCursor(objectStates, freshCursor);
                 }
 
-                if (Root.WasLastFetchComplete(objectaddress) && ShouldCommitObjectListCache(ownedPath, freshCursor, objectStates.Count))
+                if (Root.WasLastFetchComplete(objectaddress) && ShouldCommitDerivedObjectListCache(ownedPath, freshCursor))
                 {
                     var payload = new
                     {
@@ -2962,6 +3037,30 @@ namespace SUP.P2FK
                 int cachedCursor = 0;
                 bool hasCreatedCache = TryLoadObjectListCache(createdPath, out objectStates, out cachedCursor);
 
+                if (hasCreatedCache)
+                {
+                    int deltaProbeCursor = cachedCursor > 0 ? cachedCursor + 1 : 0;
+                    Root[] newAddressRoots = Root.GetRootsByAddress(objectaddress, username, password, url, deltaProbeCursor, -1, versionByte);
+                    if (Root.WasLastFetchComplete(objectaddress) && newAddressRoots.Count() == 0)
+                    {
+                        objectStates = RefreshFilteredObjectStates(objectStates, objectaddress, username, password, url, versionByte,
+                            (state, address) => state.Creators != null && state.Creators.ContainsKey(address) && state.Creators[address].Year > 1975);
+                        StampObjectListCursor(objectStates, cachedCursor);
+
+                        if (ShouldCommitDerivedObjectListCache(createdPath, cachedCursor))
+                        {
+                            var payload = new
+                            {
+                                LastRootId = cachedCursor,
+                                Objects = objectStates
+                            };
+                            Root.AtomicWriteCacheFile(createdPath, JsonConvert.SerializeObject(payload));
+                        }
+
+                        return SliceCreated(objectStates);
+                    }
+                }
+
                 List<OBJState> cachedObjectStates = OBJState.GetObjectsByAddress(objectaddress, username, password, url, versionByte, 0, -1);
                 int freshCursor = 0;
                 if (!TryLoadObjectListCache(objectsByAddressPath, out _, out freshCursor))
@@ -2994,7 +3093,7 @@ namespace SUP.P2FK
                     }
                 }
 
-                if (Root.WasLastFetchComplete(objectaddress) && ShouldCommitObjectListCache(createdPath, freshCursor, objectStates.Count))
+                if (Root.WasLastFetchComplete(objectaddress) && ShouldCommitDerivedObjectListCache(createdPath, freshCursor))
                 {
                     var payload = new
                     {
