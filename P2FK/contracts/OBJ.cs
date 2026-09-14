@@ -133,16 +133,6 @@ namespace SUP.P2FK
                         pendingCacheInvalidations.Add(creatorAddress);
                     }
                 }
-
-                private static DateTime GetCreatorGrantDate(Dictionary<string, DateTime> creators, string address)
-                {
-                    if (creators != null && creators.TryGetValue(address, out DateTime grantedAt))
-                    {
-                        return grantedAt;
-                    }
-
-                    return default;
-                }
             }
 
             if (state?.Owners != null)
@@ -155,6 +145,26 @@ namespace SUP.P2FK
                     }
                 }
             }
+        }
+
+        private static DateTime GetCreatorGrantDate(Dictionary<string, DateTime> creators, string address)
+        {
+            if (creators != null && creators.TryGetValue(address, out DateTime grantedAt))
+            {
+                return grantedAt;
+            }
+
+            return default;
+        }
+
+        private static KeyValuePair<string, string> GetKeywordByIndex(IEnumerable<KeyValuePair<string, string>> keywords, int index)
+        {
+            if (keywords == null || index < 0)
+            {
+                return default;
+            }
+
+            return keywords.ElementAtOrDefault(index);
         }
 
         public static OBJState GetObjectByAddress(string objectaddress, string username, string password, string url, string versionByte = "111", bool verbose = false)
@@ -327,7 +337,7 @@ namespace SUP.P2FK
                                                 objectinspector = JsonConvert.DeserializeObject<OBJ>(File.ReadAllText(@"root\" + transaction.TransactionId + @"\OBJ"));
 
                                             }
-                                            catch (Exception e)
+                                            catch (Exception)
                                             {
                                                 if (verbose)
                                                 {
@@ -951,7 +961,7 @@ namespace SUP.P2FK
                                             foreach (var burn in brninspector)
                                             {
                                                 //is this the right object to burn?
-                                                if (transaction.Keyword.Reverse().GetItemByIndex((int)burn[0]).Key != objectaddress) { break; }
+                                                if (GetKeywordByIndex(transaction.Keyword.Reverse(), (int)burn[0]).Key != objectaddress) { break; }
 
                                                 string burnr = transaction.SignedBy;
                                                 long qtyToBurn = burn[1];
@@ -1996,7 +2006,7 @@ namespace SUP.P2FK
                 objectinspector = JsonConvert.DeserializeObject<OBJ>(JSONOBJ);
 
             }
-            catch (Exception ex) { return objectState; }
+            catch (Exception) { return objectState; }
 
 
             if (objectinspector.cre != null && objectState.Creators == null)
@@ -2141,7 +2151,6 @@ namespace SUP.P2FK
             string objectaddress = Root.GetPublicAddressByKeyword(searchstring, versionByte);
             if (System.IO.File.Exists(@"root\" + objectaddress + @"\BLOCK")) { return objectState; }
 
-            string JSONOBJ;
             string diskpath = "root\\" + objectaddress + "\\";
             string filepath = "";
             // Generate SHA256 hash of searchstring
@@ -3055,7 +3064,7 @@ namespace SUP.P2FK
                 {
                     foreach (OBJState objectstate in cachedObjectStates)
                     {
-                        if (objectstate.URN != null && objectstate.Creators.ContainsKey(objectaddress) && objectstate.Creators[objectaddress] != null && objectstate.Creators[objectaddress].Year > 1975)
+                        if (objectstate.URN != null && objectstate.Creators.ContainsKey(objectaddress) && objectstate.Creators[objectaddress].Year > 1975)
                         {
 
                             objectStates.Add(objectstate);
