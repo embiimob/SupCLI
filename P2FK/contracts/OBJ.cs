@@ -106,14 +106,50 @@ namespace SUP.P2FK
                 state.Image,
                 state.Name,
                 state.Description,
-                state.Attributes,
+                Attributes = state.Attributes?
+                    .OrderBy(pair => pair.Key, StringComparer.Ordinal)
+                    .Select(pair => new { pair.Key, pair.Value }),
                 state.License,
                 state.Maximum,
-                state.Creators,
-                state.Owners,
-                state.Royalties,
-                state.Offers,
-                state.Listings,
+                Creators = state.Creators?
+                    .OrderBy(pair => pair.Key, StringComparer.Ordinal)
+                    .Select(pair => new { pair.Key, pair.Value }),
+                Owners = state.Owners?
+                    .OrderBy(pair => pair.Key, StringComparer.Ordinal)
+                    .Select(pair => new
+                    {
+                        pair.Key,
+                        Quantity = pair.Value.Item1,
+                        Source = pair.Value.Item2
+                    }),
+                Royalties = state.Royalties?
+                    .OrderBy(pair => pair.Key, StringComparer.Ordinal)
+                    .Select(pair => new { pair.Key, pair.Value }),
+                Offers = state.Offers?
+                    .OrderBy(offer => offer.Requestor, StringComparer.Ordinal)
+                    .ThenBy(offer => offer.Owner, StringComparer.Ordinal)
+                    .ThenBy(offer => offer.BlockDate)
+                    .ThenBy(offer => offer.Qty)
+                    .ThenBy(offer => offer.Value)
+                    .Select(offer => new
+                    {
+                        offer.Requestor,
+                        offer.Owner,
+                        offer.Qty,
+                        offer.Value,
+                        offer.BlockDate
+                    }),
+                Listings = state.Listings?
+                    .OrderBy(pair => pair.Key, StringComparer.Ordinal)
+                    .Select(pair => new
+                    {
+                        pair.Key,
+                        pair.Value.Owner,
+                        pair.Value.Requestor,
+                        pair.Value.Qty,
+                        pair.Value.Value,
+                        pair.Value.BlockDate
+                    }),
                 state.LockedDate,
                 state.CreatedDate,
                 state.ChangeDate
