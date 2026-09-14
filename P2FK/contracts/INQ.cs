@@ -1,4 +1,3 @@
-﻿using AngleSharp.Common;
 using NBitcoin;
 using Newtonsoft.Json;
 using System;
@@ -761,7 +760,6 @@ namespace SUP.P2FK
     }
 
 }
-
 
 
 

@@ -1,4 +1,3 @@
-﻿using AngleSharp.Common;
 using NBitcoin;
 using Newtonsoft.Json;
 using System;
@@ -123,6 +122,8 @@ namespace SUP.P2FK
 
         private static void AddPendingCacheInvalidations(OBJState state, List<string> pendingCacheInvalidations)
         {
+            if (pendingCacheInvalidations == null) { return; }
+
             if (state?.Creators != null)
             {
                 foreach (string creatorAddress in state.Creators.Keys)
@@ -131,6 +132,16 @@ namespace SUP.P2FK
                     {
                         pendingCacheInvalidations.Add(creatorAddress);
                     }
+                }
+
+                private static DateTime GetCreatorGrantDate(Dictionary<string, DateTime> creators, string address)
+                {
+                    if (creators != null && creators.TryGetValue(address, out DateTime grantedAt))
+                    {
+                        return grantedAt;
+                    }
+
+                    return default;
                 }
             }
 
@@ -586,7 +597,7 @@ namespace SUP.P2FK
                                                             }
                                                         }
 
-                                                        if (objectState.Creators.TryGet(transaction.SignedBy).Year == 1)
+                                                        if (GetCreatorGrantDate(objectState.Creators, transaction.SignedBy).Year == 1)
                                                         {
                                                             objectState.Creators[transaction.SignedBy] = transaction.BlockDate;
                                                             objectState.ChangeDate = transaction.BlockDate;
@@ -876,7 +887,7 @@ namespace SUP.P2FK
 
                                                     if (objectState.Creators != null && objectState.Creators.ContainsKey(transaction.SignedBy))
                                                     {
-                                                        if (objectState.Creators.TryGet(transaction.SignedBy).Year == 1)
+                                                        if (GetCreatorGrantDate(objectState.Creators, transaction.SignedBy).Year == 1)
                                                         {
                                                             objectState.Creators[transaction.SignedBy] = transaction.BlockDate;
                                                             objectState.ChangeDate = transaction.BlockDate;
@@ -1696,7 +1707,7 @@ namespace SUP.P2FK
                                                     if (objectState.Creators != null && objectState.Creators.ContainsKey(transaction.SignedBy))
                                                     {
                                                         // update grant date if null and signed by a creator
-                                                        if (objectState.Creators.TryGet(transaction.SignedBy).Year == 1)
+                                                        if (GetCreatorGrantDate(objectState.Creators, transaction.SignedBy).Year == 1)
                                                         {
                                                             objectState.Creators[transaction.SignedBy] = transaction.BlockDate;
                                                             objectState.ChangeDate = transaction.BlockDate;
@@ -2019,7 +2030,7 @@ namespace SUP.P2FK
                 if (objectState.Creators.ContainsKey(objectTransaction.SignedBy))
                 {
 
-                    if (objectinspector.cre != null && objectState.Creators.TryGet(objectTransaction.SignedBy).Year == 1)
+                    if (objectinspector.cre != null && GetCreatorGrantDate(objectState.Creators, objectTransaction.SignedBy).Year == 1)
                     {
                         objectState.Creators[objectTransaction.SignedBy] = objectTransaction.BlockDate;
                         objectState.ChangeDate = objectTransaction.BlockDate;

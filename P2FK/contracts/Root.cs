@@ -1,4 +1,3 @@
-﻿using AngleSharp.Common;
 using SUP.RPCClient;
 using NBitcoin;
 using Newtonsoft.Json;

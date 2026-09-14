@@ -6,11 +6,10 @@
     <AssemblyName>SUP</AssemblyName>
     <RootNamespace>SUP</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
+    <Nullable>disable</Nullable>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="AngleSharp" Version="1.2.0" />
     <PackageReference Include="CommandLineParser" Version="2.9.1" />
     <PackageReference Include="NBitcoin" Version="7.0.34" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />

@@ -8,8 +8,7 @@ namespace SUP.P2FK
     public class ECEncryption
     {
         private readonly ECElGamal ecElGamal = new ECElGamal();
-        private readonly RijndaelManaged aesEncryption = new RijndaelManaged();
-        private readonly RNGCryptoServiceProvider rngCsp = new RNGCryptoServiceProvider();
+        private readonly Aes aesEncryption = Aes.Create();
 
         public ECEncryption()
         {
@@ -32,7 +31,7 @@ namespace SUP.P2FK
             var tagBytes = tag.EncodePoint(false);
 
             byte[] iv = new byte[16];
-            rngCsp.GetBytes(iv);
+            RandomNumberGenerator.Fill(iv);
 
             aesEncryption.IV = iv;
 
