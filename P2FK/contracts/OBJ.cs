@@ -203,6 +203,66 @@ namespace SUP.P2FK
             return keywords.ElementAtOrDefault(index);
         }
 
+        private static int GetLegacyObjectListCursor(List<OBJState> states)
+        {
+            if (states == null || states.Count == 0) return 0;
+            try { return states.Max(state => state.Id); } catch { return 0; }
+        }
+
+        private static void StampObjectListCursor(List<OBJState> states, int cursor)
+        {
+            if (states == null || states.Count == 0) return;
+            try { states[states.Count - 1].Id = cursor; } catch { }
+        }
+
+        private static bool TryLoadObjectListCache(string cachePath, out List<OBJState> cachedStates, out int cachedCursor)
+        {
+            cachedStates = new List<OBJState> { };
+            cachedCursor = 0;
+            string json;
+            try { json = System.IO.File.ReadAllText(cachePath); } catch { return false; }
+            if (string.IsNullOrWhiteSpace(json)) return false;
+
+            try
+            {
+                var wrapped = JsonConvert.DeserializeObject<Dictionary<string, object>>(json);
+                if (wrapped != null && wrapped.ContainsKey("LastRootId") && wrapped.ContainsKey("Objects"))
+                {
+                    cachedCursor = Convert.ToInt32(wrapped["LastRootId"]);
+                    cachedStates = JsonConvert.DeserializeObject<List<OBJState>>(wrapped["Objects"].ToString()) ?? new List<OBJState> { };
+                    StampObjectListCursor(cachedStates, cachedCursor);
+                    return true;
+                }
+            }
+            catch { }
+
+            try
+            {
+                cachedStates = JsonConvert.DeserializeObject<List<OBJState>>(json) ?? new List<OBJState> { };
+                cachedCursor = GetLegacyObjectListCursor(cachedStates);
+                StampObjectListCursor(cachedStates, cachedCursor);
+                return true;
+            }
+            catch
+            {
+                cachedStates = new List<OBJState> { };
+                cachedCursor = 0;
+                return false;
+            }
+        }
+
+        private static bool ShouldCommitObjectListCache(string cachePath, int newCursor, int newCount)
+        {
+            if (!TryLoadObjectListCache(cachePath, out List<OBJState> existingStates, out int existingCursor))
+            {
+                return true;
+            }
+
+            if (newCursor < existingCursor) { return false; }
+            if (newCursor == existingCursor && newCount < existingStates.Count) { return false; }
+            return true;
+        }
+
         public static OBJState GetObjectByAddress(string objectaddress, string username, string password, string url, string versionByte = "111", bool verbose = false)
         {
 
@@ -2686,68 +2746,6 @@ namespace SUP.P2FK
                 return states.Take(qty).ToList();
             }
 
-            int GetLegacyCursor(List<OBJState> states)
-            {
-                if (states == null || states.Count == 0) return 0;
-                try { return states.Max(s => s.Id); } catch { return 0; }
-            }
-
-            void StampCursor(List<OBJState> states, int cursor)
-            {
-                if (states == null || states.Count == 0) return;
-                // Legacy list readers use the final element Id as process cursor.
-                // Keep this mirrored for compatibility while LastRootId is persisted.
-                try { states[states.Count - 1].Id = cursor; } catch { }
-            }
-
-            bool TryLoadObjectCache(string cachePath, out List<OBJState> cachedStates, out int cachedCursor)
-            {
-                cachedStates = new List<OBJState> { };
-                cachedCursor = 0;
-                string json;
-                try { json = System.IO.File.ReadAllText(cachePath); } catch { return false; }
-                if (string.IsNullOrWhiteSpace(json)) return false;
-
-                try
-                {
-                    var wrapped = JsonConvert.DeserializeObject<Dictionary<string, object>>(json);
-                    if (wrapped != null && wrapped.ContainsKey("LastRootId") && wrapped.ContainsKey("Objects"))
-                    {
-                        cachedCursor = Convert.ToInt32(wrapped["LastRootId"]);
-                        cachedStates = JsonConvert.DeserializeObject<List<OBJState>>(wrapped["Objects"].ToString()) ?? new List<OBJState> { };
-                        StampCursor(cachedStates, cachedCursor);
-                        return true;
-                    }
-                }
-                catch { }
-
-                try
-                {
-                    cachedStates = JsonConvert.DeserializeObject<List<OBJState>>(json) ?? new List<OBJState> { };
-                    cachedCursor = GetLegacyCursor(cachedStates);
-                    StampCursor(cachedStates, cachedCursor);
-                    return true;
-                }
-                catch
-                {
-                    cachedStates = new List<OBJState> { };
-                    cachedCursor = 0;
-                    return false;
-                }
-            }
-
-            bool ShouldCommitCache(string cachePath, int newCursor, int newCount)
-            {
-                if (!TryLoadObjectCache(cachePath, out List<OBJState> existingStates, out int existingCursor))
-                {
-                    return true;
-                }
-
-                if (newCursor < existingCursor) { return false; }
-                if (newCursor == existingCursor && newCount < existingStates.Count) { return false; }
-                return true;
-            }
-
             List<OBJState> objectStates = new List<OBJState> { };
 
             if (System.IO.File.Exists(@"root\" + objectaddress + @"\BLOCK"))
@@ -2764,7 +2762,7 @@ namespace SUP.P2FK
                 int intProcessHeight = 0;
 
                 // fetch current JSONOBJ from disk if it exists (supports legacy list and wrapped format)
-                TryLoadObjectCache(objectsByAddressPath, out objectStates, out intProcessHeight);
+                TryLoadObjectListCache(objectsByAddressPath, out objectStates, out intProcessHeight);
 
                 if (calculate)
                 {
@@ -2777,7 +2775,7 @@ namespace SUP.P2FK
 
                 if (intProcessHeight != 0 && objectTransactions.Count() == 0)
                 {
-                    StampCursor(objectStates, intProcessHeight);
+                    StampObjectListCursor(objectStates, intProcessHeight);
                     return SliceObjectsByAddress(objectStates);
                 }
 
@@ -2876,12 +2874,12 @@ namespace SUP.P2FK
                 }
                 int committedCursor = intProcessHeight;
                 try { committedCursor = Math.Max(committedCursor, objectTransactions.Max(max => max.Id)); } catch { }
-                StampCursor(objectStates, committedCursor);
+                StampObjectListCursor(objectStates, committedCursor);
 
                 // Only write the collection list if the root fetch completed without error.
-                if (objectStates.Count > 0 && Root.WasLastFetchComplete(objectaddress))
+                if (Root.WasLastFetchComplete(objectaddress))
                 {
-                    if (ShouldCommitCache(objectsByAddressPath, committedCursor, objectStates.Count))
+                    if (ShouldCommitObjectListCache(objectsByAddressPath, committedCursor, objectStates.Count))
                     {
                         var payload = new
                         {
@@ -2906,75 +2904,26 @@ namespace SUP.P2FK
                 else { return states.Skip(skip).Take(qty).ToList(); }
             }
 
-            void StampCursor(List<OBJState> states, int cursor)
-            {
-                if (states == null || states.Count == 0) return;
-                try { states[states.Count - 1].Id = cursor; } catch { }
-            }
-
-            bool TryLoadObjListCache(string cachePath, out List<OBJState> cachedStates, out int cursor)
-            {
-                cachedStates = new List<OBJState> { };
-                cursor = 0;
-                string json;
-                try { json = System.IO.File.ReadAllText(cachePath); } catch { return false; }
-                if (string.IsNullOrWhiteSpace(json)) return false;
-
-                try
-                {
-                    var wrapped = JsonConvert.DeserializeObject<Dictionary<string, object>>(json);
-                    if (wrapped != null && wrapped.ContainsKey("LastRootId") && wrapped.ContainsKey("Objects"))
-                    {
-                        cursor = Convert.ToInt32(wrapped["LastRootId"]);
-                        cachedStates = JsonConvert.DeserializeObject<List<OBJState>>(wrapped["Objects"].ToString()) ?? new List<OBJState> { };
-                        StampCursor(cachedStates, cursor);
-                        return true;
-                    }
-                }
-                catch { }
-
-                try
-                {
-                    cachedStates = JsonConvert.DeserializeObject<List<OBJState>>(json) ?? new List<OBJState> { };
-                    cursor = cachedStates.Count > 0 ? cachedStates.Max(state => state.Id) : 0;
-                    StampCursor(cachedStates, cursor);
-                    return true;
-                }
-                catch
-                {
-                    cachedStates = new List<OBJState> { };
-                    cursor = 0;
-                    return false;
-                }
-            }
-
-            bool ShouldCommitCache(string cachePath, int newCursor, int newCount)
-            {
-                if (!TryLoadObjListCache(cachePath, out List<OBJState> existingStates, out int existingCursor))
-                {
-                    return true;
-                }
-                if (newCursor < existingCursor) { return false; }
-                if (newCursor == existingCursor && newCount < existingStates.Count) { return false; }
-                return true;
-            }
-
             List<OBJState> objectStates = new List<OBJState> { };
 
             if (System.IO.File.Exists(@"root\" + objectaddress + @"\BLOCK")) { return objectStates; }
 
             string diskpath = "root\\" + objectaddress + "\\";
             string ownedPath = diskpath + "GetObjectsOwnedByAddress.json";
+            string objectsByAddressPath = diskpath + "GetObjectsByAddress.json";
 
             using (Root.AcquireAddressCacheLock(objectaddress, "GetObjectsOwnedByAddress"))
             {
                 int cachedCursor = 0;
-                TryLoadObjListCache(ownedPath, out objectStates, out cachedCursor);
+                bool hasOwnedCache = TryLoadObjectListCache(ownedPath, out objectStates, out cachedCursor);
 
                 List<OBJState> cachedObjectStates = OBJState.GetObjectsByAddress(objectaddress, username, password, url, versionByte, 0, -1);
                 int freshCursor = 0;
-                try { freshCursor = cachedObjectStates.Last().Id; } catch { }
-                if (cachedCursor == freshCursor && objectStates.Count > 0)
+                if (!TryLoadObjectListCache(objectsByAddressPath, out _, out freshCursor))
+                {
+                    try { freshCursor = cachedObjectStates.Last().Id; } catch { }
+                }
+                if (hasOwnedCache && cachedCursor == freshCursor)
                 {
                     return SliceOwned(objectStates);
                 }
@@ -2993,10 +2942,10 @@ namespace SUP.P2FK
 
                 if (freshCursor > 0)
                 {
-                    StampCursor(objectStates, freshCursor);
+                    StampObjectListCursor(objectStates, freshCursor);
                 }
 
-                if (Root.WasLastFetchComplete(objectaddress) && ShouldCommitCache(ownedPath, freshCursor, objectStates.Count))
+                if (Root.WasLastFetchComplete(objectaddress) && ShouldCommitObjectListCache(ownedPath, freshCursor, objectStates.Count))
                 {
                     var payload = new
                     {
@@ -3019,76 +2968,26 @@ namespace SUP.P2FK
                 else { return states.Skip(skip).Take(qty).ToList(); }
             }
 
-            void StampCursor(List<OBJState> states, int cursor)
-            {
-                if (states == null || states.Count == 0) return;
-                try { states[states.Count - 1].Id = cursor; } catch { }
-            }
-
-            bool TryLoadObjListCache(string cachePath, out List<OBJState> cachedStates, out int cursor)
-            {
-                cachedStates = new List<OBJState> { };
-                cursor = 0;
-                string json;
-                try { json = System.IO.File.ReadAllText(cachePath); } catch { return false; }
-                if (string.IsNullOrWhiteSpace(json)) return false;
-
-                try
-                {
-                    var wrapped = JsonConvert.DeserializeObject<Dictionary<string, object>>(json);
-                    if (wrapped != null && wrapped.ContainsKey("LastRootId") && wrapped.ContainsKey("Objects"))
-                    {
-                        cursor = Convert.ToInt32(wrapped["LastRootId"]);
-                        cachedStates = JsonConvert.DeserializeObject<List<OBJState>>(wrapped["Objects"].ToString()) ?? new List<OBJState> { };
-                        StampCursor(cachedStates, cursor);
-                        return true;
-                    }
-                }
-                catch { }
-
-                try
-                {
-                    cachedStates = JsonConvert.DeserializeObject<List<OBJState>>(json) ?? new List<OBJState> { };
-                    cursor = cachedStates.Count > 0 ? cachedStates.Max(state => state.Id) : 0;
-                    StampCursor(cachedStates, cursor);
-                    return true;
-                }
-                catch
-                {
-                    cachedStates = new List<OBJState> { };
-                    cursor = 0;
-                    return false;
-                }
-            }
-
-            bool ShouldCommitCache(string cachePath, int newCursor, int newCount)
-            {
-                if (!TryLoadObjListCache(cachePath, out List<OBJState> existingStates, out int existingCursor))
-                {
-                    return true;
-                }
-                if (newCursor < existingCursor) { return false; }
-                if (newCursor == existingCursor && newCount < existingStates.Count) { return false; }
-                return true;
-            }
-
-
             List<OBJState> objectStates = new List<OBJState> { };
 
             if (System.IO.File.Exists(@"root\" + objectaddress + @"\BLOCK")) { return objectStates; }
 
             string diskpath = "root\\" + objectaddress + "\\";
             string createdPath = diskpath + "GetObjectsCreatedByAddress.json";
+            string objectsByAddressPath = diskpath + "GetObjectsByAddress.json";
 
             using (Root.AcquireAddressCacheLock(objectaddress, "GetObjectsCreatedByAddress"))
             {
                 int cachedCursor = 0;
-                TryLoadObjListCache(createdPath, out objectStates, out cachedCursor);
+                bool hasCreatedCache = TryLoadObjectListCache(createdPath, out objectStates, out cachedCursor);
 
                 List<OBJState> cachedObjectStates = OBJState.GetObjectsByAddress(objectaddress, username, password, url, versionByte, 0, -1);
                 int freshCursor = 0;
-                try { freshCursor = cachedObjectStates.Last().Id; } catch { }
-                if (cachedCursor == freshCursor && objectStates.Count > 0)
+                if (!TryLoadObjectListCache(objectsByAddressPath, out _, out freshCursor))
+                {
+                    try { freshCursor = cachedObjectStates.Last().Id; } catch { }
+                }
+                if (hasCreatedCache && cachedCursor == freshCursor)
                 {
                     return SliceCreated(objectStates);
                 }
@@ -3110,11 +3009,11 @@ namespace SUP.P2FK
 
                     if (freshCursor > 0)
                     {
-                        StampCursor(objectStates, freshCursor);
+                        StampObjectListCursor(objectStates, freshCursor);
                     }
                 }
 
-                if (Root.WasLastFetchComplete(objectaddress) && ShouldCommitCache(createdPath, freshCursor, objectStates.Count))
+                if (Root.WasLastFetchComplete(objectaddress) && ShouldCommitObjectListCache(createdPath, freshCursor, objectStates.Count))
                 {
                     var payload = new
                     {
