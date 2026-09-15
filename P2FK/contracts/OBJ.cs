@@ -102,7 +102,6 @@ namespace SUP.P2FK
 
             try
             {
-                bool fetched = false;
                 List<string> cachedChangeLog = null;
 
                 if (System.IO.File.Exists(@"root\" + objectaddress + @"\BLOCK"))
@@ -124,29 +123,9 @@ namespace SUP.P2FK
                     if (diskObj != null)
                     {
                         objectState = diskObj;
-                        fetched = true;
                     }
                 }
                 catch { }
-                if (fetched && !verbose && objectState != null && objectState.URN != null)
-                {
-                    if (objectState.ChangeLog == null)
-                    {
-                        objectState.ChangeLog = new List<string>();
-                    }
-                    return objectState;
-                }
-
-                if (!verbose && fetched && objectState != null && objectState.URN == null && objectState.ProcessHeight > 0)
-                {
-                    if (objectState.ChangeLog == null)
-                    {
-                        objectState.ChangeLog = new List<string>();
-                    }
-
-                    return objectState;
-                }
-
                 if (objectState == null)
                 {
                     objectState = new OBJState();
@@ -2567,6 +2546,14 @@ namespace SUP.P2FK
 
         public static List<OBJState> GetObjectsByAddress(string objectaddress, string username, string password, string url, string versionByte = "111", int skip = 0, int qty = -1, bool calculate = false)
         {
+            return GetObjectsByAddress(objectaddress, username, password, url, versionByte, skip, qty, calculate, out _, out _);
+        }
+
+        private static List<OBJState> GetObjectsByAddress(string objectaddress, string username, string password, string url, string versionByte, int skip, int qty, bool calculate, out int lastRootId, out bool fetchComplete)
+        {
+            lastRootId = 0;
+            fetchComplete = false;
+
             List<OBJState> SliceObjectsByAddress(List<OBJState> states)
             {
                 if (skip != 0)
@@ -2630,15 +2617,14 @@ namespace SUP.P2FK
                 }
             }
 
-            bool ShouldCommitCache(string cachePath, int newCursor, int newCount)
+            bool ShouldCommitCache(string cachePath, int newCursor)
             {
-                if (!TryLoadObjectCache(cachePath, out List<OBJState> existingStates, out int existingCursor))
+                if (!TryLoadObjectCache(cachePath, out _, out int existingCursor))
                 {
                     return true;
                 }
 
                 if (newCursor < existingCursor) { return false; }
-                if (newCursor == existingCursor && newCount < existingStates.Count) { return false; }
                 return true;
             }
 
@@ -2668,16 +2654,47 @@ namespace SUP.P2FK
                     objectStates = new List<OBJState> { };
                 }
 
-                Root[] objectTransactions = Root.GetRootsByAddress(objectaddress, username, password, url, intProcessHeight, -1, versionByte, calculate);
+                // Revisit cached history to repair candidates missed by older stale snapshots.
+                // Root retrieval and each object's state processing remain incremental.
+                Root[] objectTransactions = Root.GetRootsByAddress(objectaddress, username, password, url, 0, -1, versionByte, calculate);
 
-
-                if (intProcessHeight != 0 && objectTransactions.Count() == 0)
+                HashSet<string> addedValues = new HashSet<string>();
+                bool objectsFetchComplete = true;
+                void RefreshObject(string key)
                 {
-                    StampCursor(objectStates, intProcessHeight);
-                    return SliceObjectsByAddress(objectStates);
+                    if (!addedValues.Add(key)) { return; }
+                    OBJState existingObjectState = objectStates.FirstOrDefault(os => os.Creators?.FirstOrDefault().Key == key);
+                    OBJState refreshedObject = GetObjectByAddress(key, username, password, url, versionByte, calculate);
+                    if (!Root.WasLastFetchComplete(key))
+                    {
+                        objectsFetchComplete = false;
+                        return;
+                    }
+
+                    if (refreshedObject.URN != null)
+                    {
+                        if (existingObjectState != null)
+                        {
+                            objectStates[objectStates.IndexOf(existingObjectState)] = refreshedObject;
+                        }
+                        else
+                        {
+                            objectStates.Add(refreshedObject);
+                        }
+                    }
+                    else if (existingObjectState != null)
+                    {
+                        objectStates.Remove(existingObjectState);
+                    }
                 }
 
-                List<string> addedValues = new List<string>();
+                // Object histories can change even when the queried address cursor does not.
+                foreach (OBJState cachedObject in objectStates.ToList())
+                {
+                    string key = cachedObject.Creators?.FirstOrDefault().Key;
+                    if (key != null) { RefreshObject(key); }
+                }
+
                 HashSet<string> requiredKeys = new HashSet<string> { "OBJ", "GIV", "BRN", "BUY", "LST" };
                 HashSet<string> searchallKeys = new HashSet<string> { "GIV", "BRN", "LST" };
 
@@ -2685,9 +2702,9 @@ namespace SUP.P2FK
 
                 foreach (Root transaction in objectTransactions)
                 {
-                    if (transaction.Id > intProcessHeight)
+                    if (transaction.Id > 0)
                     {
-                        intProcessHeight = transaction.Id;
+                        intProcessHeight = Math.Max(intProcessHeight, transaction.Id);
 
                         //ignore any transaction that is not signed
                         if (transaction.Signed)
@@ -2701,30 +2718,7 @@ namespace SUP.P2FK
                                 {
                                     foreach (string key in transaction.Keyword.Keys)
                                     {
-                                        if (!addedValues.Contains(key))
-                                        {
-                                            addedValues.Add(key);
-
-                                            OBJState existingObjectState = null;
-                                            try { existingObjectState = objectStates.FirstOrDefault(os => os.Creators.First().Key == key); } catch { }
-
-                                            if (existingObjectState != null)
-                                            {
-                                                OBJState isObject = GetObjectByAddress(key, username, password, url, versionByte, calculate);
-                                                if (isObject.URN != null)
-                                                {
-                                                    objectStates[objectStates.IndexOf(existingObjectState)] = isObject;
-                                                }
-                                            }
-                                            else
-                                            {
-                                                OBJState newObject = GetObjectByAddress(key, username, password, url, versionByte, calculate);
-                                                if (newObject.URN != null)
-                                                {
-                                                    objectStates.Add(newObject);
-                                                }
-                                            }
-                                        }
+                                        RefreshObject(key);
                                     }
 
 
@@ -2735,32 +2729,7 @@ namespace SUP.P2FK
                                     foreach (string key in transaction.Output.Keys.Reverse().Take(3))
                                     {
 
-                                        if (!addedValues.Contains(key))
-                                        {
-                                            addedValues.Add(key);
-
-
-                                            OBJState existingObjectState = null;
-
-                                            try { existingObjectState = objectStates.FirstOrDefault(os => os.Creators.First().Key == key); } catch { } // MOVE ON
-
-                                            if (existingObjectState != null)
-                                            {
-                                                OBJState isObject = GetObjectByAddress(key, username, password, url, versionByte, calculate);
-                                                if (isObject.URN != null)
-                                                {
-                                                    objectStates[objectStates.IndexOf(existingObjectState)] = isObject;
-                                                }
-                                            }
-                                            else
-                                            {
-                                                OBJState newObject = GetObjectByAddress(key, username, password, url, versionByte, calculate);
-                                                if (newObject.URN != null)
-                                                {
-                                                    objectStates.Add(newObject);
-                                                }
-                                            }
-                                        }
+                                        RefreshObject(key);
                                     }
 
                                 }
@@ -2773,11 +2742,13 @@ namespace SUP.P2FK
                 int committedCursor = intProcessHeight;
                 try { committedCursor = Math.Max(committedCursor, objectTransactions.Max(max => max.Id)); } catch { }
                 StampCursor(objectStates, committedCursor);
+                lastRootId = committedCursor;
+                fetchComplete = objectsFetchComplete && Root.WasLastFetchComplete(objectaddress);
 
                 // Only write the collection list if the root fetch completed without error.
-                if (objectStates.Count > 0 && Root.WasLastFetchComplete(objectaddress))
+                if (fetchComplete)
                 {
-                    if (ShouldCommitCache(objectsByAddressPath, committedCursor, objectStates.Count))
+                    if (ShouldCommitCache(objectsByAddressPath, committedCursor))
                     {
                         var payload = new
                         {
@@ -2844,14 +2815,13 @@ namespace SUP.P2FK
                 }
             }
 
-            bool ShouldCommitCache(string cachePath, int newCursor, int newCount)
+            bool ShouldCommitCache(string cachePath, int newCursor)
             {
-                if (!TryLoadObjListCache(cachePath, out List<OBJState> existingStates, out int existingCursor))
+                if (!TryLoadObjListCache(cachePath, out _, out int existingCursor))
                 {
                     return true;
                 }
                 if (newCursor < existingCursor) { return false; }
-                if (newCursor == existingCursor && newCount < existingStates.Count) { return false; }
                 return true;
             }
 
@@ -2864,22 +2834,13 @@ namespace SUP.P2FK
 
             using (Root.AcquireAddressCacheLock(objectaddress, "GetObjectsOwnedByAddress"))
             {
-                int cachedCursor = 0;
-                TryLoadObjListCache(ownedPath, out objectStates, out cachedCursor);
-
-                List<OBJState> cachedObjectStates = OBJState.GetObjectsByAddress(objectaddress, username, password, url, versionByte, 0, -1);
-                int freshCursor = 0;
-                try { freshCursor = cachedObjectStates.Last().Id; } catch { }
-                if (cachedCursor == freshCursor && objectStates.Count > 0)
-                {
-                    return SliceOwned(objectStates);
-                }
+                List<OBJState> cachedObjectStates = GetObjectsByAddress(objectaddress, username, password, url, versionByte, 0, -1, false, out int freshCursor, out bool fetchComplete);
 
                 objectStates = new List<OBJState>();
                 //return all roots found at address
                 foreach (OBJState objectstate in cachedObjectStates)
                 {
-                    if (objectstate.URN != null && objectstate.Owners.ContainsKey(objectaddress))
+                    if (objectstate.URN != null && objectstate.Owners?.ContainsKey(objectaddress) == true)
                     {
 
                         objectStates.Add(objectstate);
@@ -2892,7 +2853,7 @@ namespace SUP.P2FK
                     StampCursor(objectStates, freshCursor);
                 }
 
-                if (Root.WasLastFetchComplete(objectaddress) && ShouldCommitCache(ownedPath, freshCursor, objectStates.Count))
+                if (fetchComplete && ShouldCommitCache(ownedPath, freshCursor))
                 {
                     var payload = new
                     {
