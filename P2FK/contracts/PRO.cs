@@ -59,7 +59,6 @@ namespace SUP.P2FK
             if (System.IO.File.Exists(@"root\" + profileaddress + @"\BLOCK")) { return new PROState { }; }
 
             string JSONOBJ;
-            string logstatus;
             string diskpath = "root\\" + profileaddress + "\\";
             string profilePath = diskpath + "GetProfileByAddress.json";
 

@@ -6,8 +6,6 @@ namespace SUP.P2FK
 {
     public class ECElGamal
     {
-        private readonly RNGCryptoServiceProvider rngCsp = new RNGCryptoServiceProvider();
-
         public ECPoint GenerateKey(ECPoint publicKey, out byte[] key)
         {
             return GenerateKey(publicKey, out key, null);
@@ -20,7 +18,7 @@ namespace SUP.P2FK
                 if (k == null)
                 {
                     byte[] kBytes = new byte[33];
-                    rngCsp.GetBytes(kBytes);
+                    RandomNumberGenerator.Fill(kBytes);
                     kBytes[32] = 0;
 
                     k = new BigInteger(kBytes);

@@ -1,4 +1,3 @@
-﻿using AngleSharp.Common;
 using SUP.RPCClient;
 using NBitcoin;
 using Newtonsoft.Json;
@@ -139,7 +138,6 @@ namespace SUP.P2FK
             Root P2FKRoot = new Root();
             string diskpath = Path.Combine("root", transactionid);
             string P2FKJSONString = null;
-            bool isMuted = false;
             try
             {
                 if (rootbytes == null && calculate == false)
@@ -522,7 +520,7 @@ namespace SUP.P2FK
                     //string asciiString = Encoding.ASCII.GetString(transactionBytes);
 
                     // Create SHA-256 hash
-                    System.Security.Cryptography.SHA256 mySHA256 = SHA256Managed.Create();
+                    System.Security.Cryptography.SHA256 mySHA256 = System.Security.Cryptography.SHA256.Create();
                     P2FKRoot.Hash = BitConverter
                         .ToString(
                             mySHA256.ComputeHash(transactionBytes
@@ -606,14 +604,11 @@ namespace SUP.P2FK
             {
                 using (AcquireAddressCacheLock(address, "GetRootsByAddress"))
                 {
-                bool fetched = false;
-
                 try
                 {
                     string diskpath = Path.Combine("root", address);
                     string P2FKJSONString = System.IO.File.ReadAllText(Path.Combine(diskpath, "ROOTS.json"));
                     rootList = JsonConvert.DeserializeObject<List<Root>>(P2FKJSONString);
-                    fetched = true;
                 }
                 catch { }
 

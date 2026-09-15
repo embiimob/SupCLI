@@ -1,4 +1,3 @@
-﻿using AngleSharp.Common;
 using NBitcoin;
 using Newtonsoft.Json;
 using System;
@@ -155,7 +154,7 @@ namespace SUP.P2FK
                                     objectinspector = JsonConvert.DeserializeObject<INQ>(File.ReadAllText(@"root\" + transaction.TransactionId + @"\INQ"));
 
                                 }
-                                catch (Exception e)
+                                catch (Exception)
                                 {
 
                                     logstatus = "[\"" + transaction.SignedBy + "\",\"" + objectaddress + "\",\"inspect\",\"\",\"\",\"failed due to invalid format\"]";
@@ -439,7 +438,6 @@ namespace SUP.P2FK
             INQ objectinspector = new INQ();
             char[] specialChars = new char[] { '\\', '/', ':', '*', '?', '"', '<', '>', '|' };
            
-            var intProcessHeight = 0;
             Root transaction = Root.GetRootByTransactionId(transactionid, username, password, url, versionByte,null,null, calculate);
 
             string JSONOBJ;
@@ -454,7 +452,7 @@ namespace SUP.P2FK
                 objectinspector = JsonConvert.DeserializeObject<INQ>(JSONOBJ);
 
             }
-            catch (Exception ex) { return objectState; }
+            catch (Exception) { return objectState; }
 
             // fetch current JSONOBJ from disk if it exists
             try
@@ -761,7 +759,5 @@ namespace SUP.P2FK
     }
 
 }
-
-
 
 
