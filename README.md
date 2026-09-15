@@ -176,6 +176,14 @@ Get profile by URN:
 SUP --versionbyte 111 --getprofilebyurn --password better-password --url http://127.0.0.1:18332 --username good-user --urn embii4u
 ```
 
+### Ownership refresh
+
+`--getobjectsownedbyaddress` refreshes associated objects before filtering their current owners. After a confirmed BRN or BUY is indexed by your RPC node, repeat the same command; no cache deletion or `--verbose` is required. Use `--qty -1` to return all owned objects.
+
+Partial burns update quantities; burning your remaining quantity removes the object from your owned results. Successful purchases add it. Fully burned/blocked objects are removed even from previously cached results.
+
+Address history is revisited locally to repair stale candidate lists, while root fetching and object-state processing remain incremental. Refreshing can require RPC calls for multiple candidate addresses. If a root fetch fails, derived caches are not overwritten; retry once the node is available.
+
 ---
 
 ## Replacing SUP.exe for p2fk.io
