@@ -69,6 +69,13 @@ namespace SUP.P2FK
 
     public class OBJState
     {
+        private sealed class ObjectListCachePayload
+        {
+            public int LastRootId { get; set; }
+            public List<OBJState> Objects { get; set; }
+            public List<string> ObjectAddresses { get; set; }
+        }
+
         public int Id { get; set; }
         public string TransactionId { get; set; }
         public string URN { get; set; }
@@ -215,21 +222,23 @@ namespace SUP.P2FK
             try { states[states.Count - 1].Id = cursor; } catch { }
         }
 
-        private static bool TryLoadObjectListCache(string cachePath, out List<OBJState> cachedStates, out int cachedCursor)
+        private static bool TryLoadObjectListCache(string cachePath, out List<OBJState> cachedStates, out int cachedCursor, out List<string> cachedObjectAddresses)
         {
             cachedStates = new List<OBJState> { };
             cachedCursor = 0;
+            cachedObjectAddresses = new List<string> { };
             string json;
             try { json = System.IO.File.ReadAllText(cachePath); } catch { return false; }
             if (string.IsNullOrWhiteSpace(json)) return false;
 
             try
             {
-                var wrapped = JsonConvert.DeserializeObject<Dictionary<string, object>>(json);
-                if (wrapped != null && wrapped.ContainsKey("LastRootId") && wrapped.ContainsKey("Objects"))
+                ObjectListCachePayload wrapped = JsonConvert.DeserializeObject<ObjectListCachePayload>(json);
+                if (wrapped != null && wrapped.Objects != null)
                 {
-                    cachedCursor = Convert.ToInt32(wrapped["LastRootId"]);
-                    cachedStates = JsonConvert.DeserializeObject<List<OBJState>>(wrapped["Objects"].ToString()) ?? new List<OBJState> { };
+                    cachedCursor = wrapped.LastRootId;
+                    cachedStates = wrapped.Objects ?? new List<OBJState> { };
+                    cachedObjectAddresses = wrapped.ObjectAddresses ?? new List<string> { };
                     StampObjectListCursor(cachedStates, cachedCursor);
                     return true;
                 }
@@ -247,8 +256,14 @@ namespace SUP.P2FK
             {
                 cachedStates = new List<OBJState> { };
                 cachedCursor = 0;
+                cachedObjectAddresses = new List<string> { };
                 return false;
             }
+        }
+
+        private static bool TryLoadObjectListCache(string cachePath, out List<OBJState> cachedStates, out int cachedCursor)
+        {
+            return TryLoadObjectListCache(cachePath, out cachedStates, out cachedCursor, out _);
         }
 
         private static bool ShouldCommitObjectListCache(string cachePath, int newCursor, int newCount)
@@ -273,31 +288,14 @@ namespace SUP.P2FK
             return newCursor >= existingCursor;
         }
 
-        private static string GetObjectAddressFromState(OBJState state, string versionByte)
-        {
-            if (state == null || string.IsNullOrWhiteSpace(state.URN))
-            {
-                return null;
-            }
-
-            try
-            {
-                return Root.GetPublicAddressByKeyword(state.URN, versionByte);
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        private static List<OBJState> RefreshFilteredObjectStates(IEnumerable<OBJState> cachedStates, string ownerOrCreatorAddress, string username, string password, string url, string versionByte, Func<OBJState, string, bool> includePredicate)
+        private static List<OBJState> RefreshFilteredObjectStates(IEnumerable<string> objectAddresses, string ownerOrCreatorAddress, string username, string password, string url, string versionByte, Func<OBJState, string, bool> includePredicate, out List<string> refreshedObjectAddresses)
         {
             List<OBJState> refreshedStates = new List<OBJState>();
+            refreshedObjectAddresses = new List<string>();
             HashSet<string> seenObjectAddresses = new HashSet<string>();
 
-            foreach (OBJState cachedState in cachedStates ?? Enumerable.Empty<OBJState>())
+            foreach (string objectAddress in objectAddresses ?? Enumerable.Empty<string>())
             {
-                string objectAddress = GetObjectAddressFromState(cachedState, versionByte);
                 if (string.IsNullOrWhiteSpace(objectAddress) || !seenObjectAddresses.Add(objectAddress))
                 {
                     continue;
@@ -307,6 +305,7 @@ namespace SUP.P2FK
                 if (refreshedState != null && refreshedState.URN != null && includePredicate(refreshedState, ownerOrCreatorAddress))
                 {
                     refreshedStates.Add(refreshedState);
+                    refreshedObjectAddresses.Add(objectAddress);
                 }
             }
 
@@ -2812,15 +2811,17 @@ namespace SUP.P2FK
                 int intProcessHeight = 0;
                 int cachedProcessHeight = 0;
                 bool rebuildFromScratch = false;
+                List<string> objectAddresses = new List<string> { };
 
                 // fetch current JSONOBJ from disk if it exists (supports legacy list and wrapped format)
-                TryLoadObjectListCache(objectsByAddressPath, out objectStates, out intProcessHeight);
+                TryLoadObjectListCache(objectsByAddressPath, out objectStates, out intProcessHeight, out objectAddresses);
                 cachedProcessHeight = intProcessHeight;
 
                 if (calculate)
                 {
                     intProcessHeight = 0;
                     objectStates = new List<OBJState> { };
+                    objectAddresses = new List<string> { };
                 }
 
                 rebuildFromScratch = calculate || intProcessHeight == 0;
@@ -2840,6 +2841,7 @@ namespace SUP.P2FK
                     rebuildFromScratch = true;
                     intProcessHeight = 0;
                     objectStates = new List<OBJState> { };
+                    objectAddresses = new List<string> { };
                     objectTransactions = Root.GetRootsByAddress(objectaddress, username, password, url, 0, -1, versionByte);
                 }
 
@@ -2874,6 +2876,7 @@ namespace SUP.P2FK
                                             if (refreshedObjectState.URN != null)
                                             {
                                                 objectStates.Add(refreshedObjectState);
+                                                objectAddresses.Add(key);
                                             }
                                         }
                                     }
@@ -2893,6 +2896,7 @@ namespace SUP.P2FK
                                             if (refreshedObjectState.URN != null)
                                             {
                                                 objectStates.Add(refreshedObjectState);
+                                                objectAddresses.Add(key);
                                             }
                                         }
                                     }
@@ -2916,7 +2920,8 @@ namespace SUP.P2FK
                         var payload = new
                         {
                             LastRootId = committedCursor,
-                            Objects = objectStates
+                            Objects = objectStates,
+                            ObjectAddresses = objectAddresses
                         };
                         var objectSerialized = JsonConvert.SerializeObject(payload);
                         Root.AtomicWriteCacheFile(objectsByAddressPath, objectSerialized);
@@ -2947,16 +2952,17 @@ namespace SUP.P2FK
             using (Root.AcquireAddressCacheLock(objectaddress, "GetObjectsOwnedByAddress"))
             {
                 int cachedCursor = 0;
-                bool hasOwnedCache = TryLoadObjectListCache(ownedPath, out objectStates, out cachedCursor);
+                List<string> ownedObjectAddresses = new List<string> { };
+                bool hasOwnedCache = TryLoadObjectListCache(ownedPath, out objectStates, out cachedCursor, out ownedObjectAddresses);
 
-                if (hasOwnedCache)
+                if (hasOwnedCache && ownedObjectAddresses.Count == objectStates.Count)
                 {
                     int deltaProbeCursor = cachedCursor > 0 ? cachedCursor + 1 : 0;
                     Root[] newAddressRoots = Root.GetRootsByAddress(objectaddress, username, password, url, deltaProbeCursor, -1, versionByte);
                     if (Root.WasLastFetchComplete(objectaddress) && newAddressRoots.Count() == 0)
                     {
-                        objectStates = RefreshFilteredObjectStates(objectStates, objectaddress, username, password, url, versionByte,
-                            (state, address) => state.Owners != null && state.Owners.ContainsKey(address));
+                        objectStates = RefreshFilteredObjectStates(ownedObjectAddresses, objectaddress, username, password, url, versionByte,
+                            (state, address) => state.Owners != null && state.Owners.ContainsKey(address), out ownedObjectAddresses);
                         StampObjectListCursor(objectStates, cachedCursor);
 
                         if (ShouldCommitDerivedObjectListCache(ownedPath, cachedCursor))
@@ -2964,7 +2970,8 @@ namespace SUP.P2FK
                             var payload = new
                             {
                                 LastRootId = cachedCursor,
-                                Objects = objectStates
+                                Objects = objectStates,
+                                ObjectAddresses = ownedObjectAddresses
                             };
                             Root.AtomicWriteCacheFile(ownedPath, JsonConvert.SerializeObject(payload));
                         }
@@ -2975,23 +2982,30 @@ namespace SUP.P2FK
 
                 List<OBJState> cachedObjectStates = OBJState.GetObjectsByAddress(objectaddress, username, password, url, versionByte, 0, -1);
                 int freshCursor = 0;
-                if (!TryLoadObjectListCache(objectsByAddressPath, out _, out freshCursor))
+                List<string> sourceObjectAddresses = new List<string> { };
+                if (!TryLoadObjectListCache(objectsByAddressPath, out cachedObjectStates, out freshCursor, out sourceObjectAddresses))
                 {
                     try { freshCursor = cachedObjectStates.Last().Id; } catch { }
                 }
-                if (hasOwnedCache && cachedCursor == freshCursor)
+                if (hasOwnedCache && cachedCursor == freshCursor && ownedObjectAddresses.Count == objectStates.Count)
                 {
                     return SliceOwned(objectStates);
                 }
 
                 objectStates = new List<OBJState>();
+                ownedObjectAddresses = new List<string> { };
                 //return all roots found at address
-                foreach (OBJState objectstate in cachedObjectStates)
+                for (int i = 0; i < cachedObjectStates.Count; i++)
                 {
+                    OBJState objectstate = cachedObjectStates[i];
                     if (objectstate.URN != null && objectstate.Owners.ContainsKey(objectaddress))
                     {
 
                         objectStates.Add(objectstate);
+                        if (sourceObjectAddresses.Count > i)
+                        {
+                            ownedObjectAddresses.Add(sourceObjectAddresses[i]);
+                        }
 
                     }
                 }
@@ -3006,7 +3020,8 @@ namespace SUP.P2FK
                     var payload = new
                     {
                         LastRootId = freshCursor,
-                        Objects = objectStates
+                        Objects = objectStates,
+                        ObjectAddresses = ownedObjectAddresses
                     };
                     Root.AtomicWriteCacheFile(ownedPath, JsonConvert.SerializeObject(payload));
                 }
@@ -3035,16 +3050,17 @@ namespace SUP.P2FK
             using (Root.AcquireAddressCacheLock(objectaddress, "GetObjectsCreatedByAddress"))
             {
                 int cachedCursor = 0;
-                bool hasCreatedCache = TryLoadObjectListCache(createdPath, out objectStates, out cachedCursor);
+                List<string> createdObjectAddresses = new List<string> { };
+                bool hasCreatedCache = TryLoadObjectListCache(createdPath, out objectStates, out cachedCursor, out createdObjectAddresses);
 
-                if (hasCreatedCache)
+                if (hasCreatedCache && createdObjectAddresses.Count == objectStates.Count)
                 {
                     int deltaProbeCursor = cachedCursor > 0 ? cachedCursor + 1 : 0;
                     Root[] newAddressRoots = Root.GetRootsByAddress(objectaddress, username, password, url, deltaProbeCursor, -1, versionByte);
                     if (Root.WasLastFetchComplete(objectaddress) && newAddressRoots.Count() == 0)
                     {
-                        objectStates = RefreshFilteredObjectStates(objectStates, objectaddress, username, password, url, versionByte,
-                            (state, address) => state.Creators != null && state.Creators.ContainsKey(address) && state.Creators[address].Year > 1975);
+                        objectStates = RefreshFilteredObjectStates(createdObjectAddresses, objectaddress, username, password, url, versionByte,
+                            (state, address) => state.Creators != null && state.Creators.ContainsKey(address) && state.Creators[address].Year > 1975, out createdObjectAddresses);
                         StampObjectListCursor(objectStates, cachedCursor);
 
                         if (ShouldCommitDerivedObjectListCache(createdPath, cachedCursor))
@@ -3052,7 +3068,8 @@ namespace SUP.P2FK
                             var payload = new
                             {
                                 LastRootId = cachedCursor,
-                                Objects = objectStates
+                                Objects = objectStates,
+                                ObjectAddresses = createdObjectAddresses
                             };
                             Root.AtomicWriteCacheFile(createdPath, JsonConvert.SerializeObject(payload));
                         }
@@ -3063,25 +3080,32 @@ namespace SUP.P2FK
 
                 List<OBJState> cachedObjectStates = OBJState.GetObjectsByAddress(objectaddress, username, password, url, versionByte, 0, -1);
                 int freshCursor = 0;
-                if (!TryLoadObjectListCache(objectsByAddressPath, out _, out freshCursor))
+                List<string> sourceObjectAddresses = new List<string> { };
+                if (!TryLoadObjectListCache(objectsByAddressPath, out cachedObjectStates, out freshCursor, out sourceObjectAddresses))
                 {
                     try { freshCursor = cachedObjectStates.Last().Id; } catch { }
                 }
-                if (hasCreatedCache && cachedCursor == freshCursor)
+                if (hasCreatedCache && cachedCursor == freshCursor && createdObjectAddresses.Count == objectStates.Count)
                 {
                     return SliceCreated(objectStates);
                 }
 
                 objectStates = new List<OBJState>();
+                createdObjectAddresses = new List<string> { };
 
                 if (cachedObjectStates.Count() > 0)
                 {
-                    foreach (OBJState objectstate in cachedObjectStates)
+                    for (int i = 0; i < cachedObjectStates.Count; i++)
                     {
+                        OBJState objectstate = cachedObjectStates[i];
                         if (objectstate.URN != null && objectstate.Creators.ContainsKey(objectaddress) && objectstate.Creators[objectaddress].Year > 1975)
                         {
 
                             objectStates.Add(objectstate);
+                            if (sourceObjectAddresses.Count > i)
+                            {
+                                createdObjectAddresses.Add(sourceObjectAddresses[i]);
+                            }
 
                         }
                     }
@@ -3098,7 +3122,8 @@ namespace SUP.P2FK
                     var payload = new
                     {
                         LastRootId = freshCursor,
-                        Objects = objectStates
+                        Objects = objectStates,
+                        ObjectAddresses = createdObjectAddresses
                     };
                     Root.AtomicWriteCacheFile(createdPath, JsonConvert.SerializeObject(payload));
                 }
