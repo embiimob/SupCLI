@@ -101,95 +101,6 @@ namespace SUP.P2FK
 
         private readonly static object SupLocker = new object();
 
-        private static string BuildCacheInvalidationFingerprint(OBJState state)
-        {
-            if (state == null) { return string.Empty; }
-
-            return JsonConvert.SerializeObject(new
-            {
-                state.TransactionId,
-                state.URN,
-                state.URI,
-                state.Image,
-                state.Name,
-                state.Description,
-                Attributes = state.Attributes?
-                    .OrderBy(pair => pair.Key, StringComparer.Ordinal)
-                    .Select(pair => new { pair.Key, pair.Value }),
-                state.License,
-                state.Maximum,
-                Creators = state.Creators?
-                    .OrderBy(pair => pair.Key, StringComparer.Ordinal)
-                    .Select(pair => new { pair.Key, pair.Value }),
-                Owners = state.Owners?
-                    .OrderBy(pair => pair.Key, StringComparer.Ordinal)
-                    .Select(pair => new
-                    {
-                        pair.Key,
-                        Quantity = pair.Value.Item1,
-                        Source = pair.Value.Item2
-                    }),
-                Royalties = state.Royalties?
-                    .OrderBy(pair => pair.Key, StringComparer.Ordinal)
-                    .Select(pair => new { pair.Key, pair.Value }),
-                Offers = state.Offers?
-                    .OrderBy(offer => offer.Requestor, StringComparer.Ordinal)
-                    .ThenBy(offer => offer.Owner, StringComparer.Ordinal)
-                    .ThenBy(offer => offer.BlockDate)
-                    .ThenBy(offer => offer.Qty)
-                    .ThenBy(offer => offer.Value)
-                    .Select(offer => new
-                    {
-                        offer.Requestor,
-                        offer.Owner,
-                        offer.Qty,
-                        offer.Value,
-                        offer.BlockDate
-                    }),
-                Listings = state.Listings?
-                    .OrderBy(pair => pair.Key, StringComparer.Ordinal)
-                    .Select(pair => new
-                    {
-                        pair.Key,
-                        pair.Value.Owner,
-                        pair.Value.Requestor,
-                        pair.Value.Qty,
-                        pair.Value.Value,
-                        pair.Value.BlockDate
-                    }),
-                state.LockedDate,
-                state.CreatedDate,
-                state.ChangeDate
-            });
-        }
-
-        private static void AddPendingCacheInvalidations(OBJState state, List<string> pendingCacheInvalidations)
-        {
-            if (pendingCacheInvalidations == null) { return; }
-
-            if (state?.Creators != null)
-            {
-                foreach (string creatorAddress in state.Creators.Keys)
-                {
-                    if (!string.IsNullOrWhiteSpace(creatorAddress) && !pendingCacheInvalidations.Contains(creatorAddress))
-                    {
-                        pendingCacheInvalidations.Add(creatorAddress);
-                    }
-                }
-            }
-
-            if (state?.Owners != null)
-            {
-                foreach (string ownerAddress in state.Owners.Keys)
-                {
-                    if (!string.IsNullOrWhiteSpace(ownerAddress) && !pendingCacheInvalidations.Contains(ownerAddress))
-                    {
-                        pendingCacheInvalidations.Add(ownerAddress);
-                    }
-                }
-            }
-        }
-
         private static DateTime GetCreatorGrantDate(Dictionary<string, DateTime> creators, string address)
         {
             if (creators != null && creators.TryGetValue(address, out DateTime grantedAt))
@@ -380,9 +291,6 @@ namespace SUP.P2FK
                     cachedChangeLog = new List<string>(objectState.ChangeLog);
                 }
 
-                string initialStateFingerprint = BuildCacheInvalidationFingerprint(objectState);
-
-
                 if (objectState.URN != null && objectState.ChangeDate.Year.ToString() == "1970")
                 {
                     Root unconfimredobj = new Root();
@@ -406,10 +314,7 @@ namespace SUP.P2FK
                 int intProcessHeight = 0;
                 try { intProcessHeight = objectState.Id; } catch { }
 
-                List<string> pendingCacheInvalidations = new List<string>();
-                AddPendingCacheInvalidations(objectState, pendingCacheInvalidations);
                 Root[] objectTransactions;
-                bool shouldInvalidateCaches = false;
 
                 if (verbose || forceRefresh) { intProcessHeight = 0; objectState = new OBJState(); objectState.ChangeLog = new List<string>(); }
 
@@ -2010,8 +1915,6 @@ namespace SUP.P2FK
 
                                             break;
                                     }
-
-                                    AddPendingCacheInvalidations(objectState, pendingCacheInvalidations);
                                 }
 
 
@@ -2095,27 +1998,8 @@ namespace SUP.P2FK
                                 var objectSerialized = JsonConvert.SerializeObject(stateToPersist);
                                 Root.AtomicWriteCacheFile(objTarget, objectSerialized);
                                 objectState = stateToPersist;
-                                shouldInvalidateCaches = initialStateFingerprint != BuildCacheInvalidationFingerprint(stateToPersist);
                             }
                         }
-
-                        if (shouldInvalidateCaches)
-                        {
-                            AddPendingCacheInvalidations(objectState, pendingCacheInvalidations);
-                        }
-                    }
-                }
-
-                // Execute deferred collection-cache invalidations now that OBJ.json is
-                // safely written. Doing this outside the lock and after the write ensures
-                // a process kill during the loop cannot leave the cache partly cleared.
-                if (Root.WasLastFetchComplete(objectaddress) && shouldInvalidateCaches)
-                {
-                    foreach (string addr in pendingCacheInvalidations)
-                    {
-                        try { System.IO.File.Delete(@"root\" + addr + @"\" + "GetObjectsByAddress.json"); } catch { }
-                        try { System.IO.File.Delete(@"root\" + addr + @"\" + "GetObjectsOwnedByAddress.json"); } catch { }
-                        try { System.IO.File.Delete(@"root\" + addr + @"\" + "GetObjectsCreatedByAddress.json"); } catch { }
                     }
                 }
 
